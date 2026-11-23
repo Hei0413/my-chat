@@ -10,7 +10,6 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       overscroll-behavior-y: none;
     }
-    /* 隱藏捲軸但保留滾動功能 */
     .no-scrollbar::-webkit-scrollbar {
       display: none;
     }
@@ -39,7 +38,7 @@
         </svg>
       </div>
       <h1 class="text-2xl font-bold mb-2">跨裝置私人通訊室</h1>
-      <p class="text-sm text-slate-500 mb-6">支援 iPad 與手機同步登入、雲端保存對話、相片、檔案與語音訊息。</p>
+      <p class="text-sm text-slate-500 mb-6">支援 iPad 與手機同步登入、自由建立多個聊天室、保存對話、相片、檔案與語音。</p>
 
       <button id="btn-google-login" class="w-full flex items-center justify-center gap-3 bg-white border border-slate-300 hover:bg-slate-50 active:scale-[0.98] text-slate-700 font-semibold py-3.5 px-4 rounded-xl shadow-sm transition-all">
         <svg class="w-5 h-5" viewBox="0 0 24 24">
@@ -58,27 +57,28 @@
   <div id="chat-screen" class="hidden flex-1 flex flex-col h-full max-w-4xl w-full mx-auto bg-white shadow-xl">
     
     <!-- 頂部導覽列 -->
-    <header class="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shrink-0 z-10">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold shadow-sm">
+    <header class="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shrink-0 z-10 gap-2">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div class="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold shadow-sm shrink-0">
           聊
         </div>
-        <div>
+        <div class="min-w-0">
           <div class="flex items-center gap-2">
-            <h2 class="font-bold text-slate-800 text-base">雲端同步聊天室</h2>
-            <span class="inline-block w-2 h-2 rounded-full bg-emerald-500" title="已連線"></span>
+            <h2 class="font-bold text-slate-800 text-sm sm:text-base truncate">雲端同步聊天室</h2>
+            <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 shrink-0" title="已連線"></span>
           </div>
-          <div class="flex items-center gap-1.5 mt-0.5">
-            <span class="text-xs text-slate-500">頻道：</span>
-            <select id="room-select" class="text-xs bg-slate-100 border border-slate-200 rounded-md px-2 py-0.5 font-medium text-indigo-700 focus:outline-none">
+          <div class="flex items-center gap-1.5 mt-1">
+            <select id="room-select" class="text-xs bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 font-medium text-indigo-700 focus:outline-none max-w-[160px] sm:max-w-[240px] truncate">
               <option value="general">公共大廳 (所有人)</option>
-              <option value="personal">我的跨裝置筆記 (僅自己可見)</option>
             </select>
+            <button id="btn-new-room" title="建立新聊天室" class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-200 px-2 py-1 rounded-lg font-semibold transition-colors shrink-0">
+              + 新增
+            </button>
           </div>
         </div>
       </div>
 
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2.5 shrink-0">
         <div class="hidden sm:flex items-center gap-2 text-right">
           <div>
             <p id="user-name" class="text-xs font-semibold text-slate-700"></p>
@@ -120,35 +120,29 @@
     <!-- 底部輸入列 -->
     <footer id="input-footer" class="bg-white border-t border-slate-200 p-3 shrink-0">
       <div class="flex items-end gap-2">
-        <!-- 隱藏的檔案與相片選擇器 -->
         <input type="file" id="file-input-image" accept="image/*" class="hidden" />
         <input type="file" id="file-input-doc" class="hidden" />
 
-        <!-- 相片按鈕 -->
         <button id="btn-upload-image" title="傳送相片" class="p-2.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors shrink-0">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
           </svg>
         </button>
 
-        <!-- 檔案按鈕 -->
         <button id="btn-upload-doc" title="傳送檔案" class="p-2.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors shrink-0">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
           </svg>
         </button>
 
-        <!-- 文字輸入框 -->
         <textarea id="message-input" rows="1" placeholder="輸入訊息..." class="flex-1 bg-slate-100 border-0 rounded-2xl px-4 py-2.5 text-sm text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white resize-none max-h-32 overflow-y-auto"></textarea>
 
-        <!-- 錄音按鈕 -->
         <button id="btn-start-record" title="錄製語音" class="p-2.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors shrink-0">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
           </svg>
         </button>
 
-        <!-- 傳送文字按鈕 -->
         <button id="btn-send-text" class="p-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl shadow-sm transition-all shrink-0">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
@@ -162,10 +156,9 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-    import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, setDoc, doc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
-    // 已填入你的專屬 Firebase 設定金鑰
     const USER_FIREBASE_CONFIG = {
       apiKey: "AIzaSyAoYsdEoFAX4W1_pBsEv0bNXX1xnnamiI0",
       authDomain: "my-chat-web-2990a.firebaseapp.com",
@@ -176,20 +169,19 @@
       measurementId: "G-N01QH5DPDJ"
     };
 
-    // 初始化 Firebase
     const app = initializeApp(USER_FIREBASE_CONFIG);
     const auth = getAuth(app);
     const db = getFirestore(app);
     const storage = getStorage(app);
     const provider = new GoogleAuthProvider();
 
-    // DOM 元素
     const loginScreen = document.getElementById('login-screen');
     const chatScreen = document.getElementById('chat-screen');
     const btnGoogleLogin = document.getElementById('btn-google-login');
     const btnLogout = document.getElementById('btn-logout');
     const loginError = document.getElementById('login-error');
     const roomSelect = document.getElementById('room-select');
+    const btnNewRoom = document.getElementById('btn-new-room');
     const messagesContainer = document.getElementById('messages-container');
     const messageInput = document.getElementById('message-input');
     const btnSendText = document.getElementById('btn-send-text');
@@ -201,7 +193,6 @@
     const uploadStatusText = document.getElementById('upload-status-text');
     const uploadPercent = document.getElementById('upload-percent');
 
-    // 錄音相關元素
     const btnStartRecord = document.getElementById('btn-start-record');
     const recordingBar = document.getElementById('recording-bar');
     const inputFooter = document.getElementById('input-footer');
@@ -211,6 +202,7 @@
 
     let currentUser = null;
     let unsubscribeMessages = null;
+    let unsubscribeRooms = null;
     let mediaRecorder = null;
     let audioChunks = [];
     let recordInterval = null;
@@ -222,13 +214,11 @@
       try {
         await signInWithPopup(auth, provider);
       } catch (error) {
-        console.error("登入失敗:", error);
-        loginError.textContent = "登入失敗：" + error.message + "（請確認已在 Firebase 後台開啟 Google 登入並加入授權網域）";
+        loginError.textContent = "登入失敗：" + error.message;
         loginError.classList.remove('hidden');
       }
     });
 
-    // 登出
     btnLogout.addEventListener('click', () => signOut(auth));
 
     // 監聽登入狀態
@@ -241,12 +231,67 @@
         
         loginScreen.classList.add('hidden');
         chatScreen.classList.remove('hidden');
+        loadRoomsList();
         loadMessages();
       } else {
         currentUser = null;
         if (unsubscribeMessages) unsubscribeMessages();
+        if (unsubscribeRooms) unsubscribeRooms();
         chatScreen.classList.add('hidden');
         loginScreen.classList.remove('hidden');
+      }
+    });
+
+    // 即時載入所有聊天室清單（跨裝置同步）
+    function loadRoomsList() {
+      if (unsubscribeRooms) unsubscribeRooms();
+      const roomsQuery = query(collection(db, "chat_rooms"), orderBy("createdAt", "asc"));
+
+      unsubscribeRooms = onSnapshot(roomsQuery, (snapshot) => {
+        const currentSelected = roomSelect.value || 'general';
+        roomSelect.innerHTML = `
+          <option value="general">公共大廳 (所有人)</option>
+          <option value="personal_${currentUser.uid}">我的私人筆記 (僅自己可見)</option>
+        `;
+
+        snapshot.forEach((docSnap) => {
+          const roomData = docSnap.data();
+          const opt = document.createElement('option');
+          opt.value = docSnap.id;
+          opt.textContent = `💬 ${roomData.name}`;
+          roomSelect.appendChild(opt);
+        });
+
+        // 保持原本選取的房間
+        if ([...roomSelect.options].some(o => o.value === currentSelected)) {
+          roomSelect.value = currentSelected;
+        }
+      });
+    }
+
+    // 建立新聊天室按鈕
+    btnNewRoom.addEventListener('click', async () => {
+      const roomName = prompt("請輸入新聊天室的名稱（例如：專案討論、好友群組）：");
+      if (!roomName || !roomName.trim()) return;
+
+      const cleanName = roomName.trim();
+      const newRoomId = "room_" + Date.now();
+
+      try {
+        await setDoc(doc(db, "chat_rooms", newRoomId), {
+          name: cleanName,
+          createdBy: currentUser.uid,
+          creatorName: currentUser.displayName || "使用者",
+          createdAt: serverTimestamp()
+        });
+
+        // 自動切換到剛建立的新聊天室
+        setTimeout(() => {
+          roomSelect.value = newRoomId;
+          loadMessages();
+        }, 300);
+      } catch (error) {
+        alert("建立聊天室失敗：" + error.message);
       }
     });
 
@@ -255,36 +300,29 @@
       if (currentUser) loadMessages();
     });
 
-    // 載入雲端訊息（即時監聽）
+    // 載入指定聊天室的訊息（獨立子集合路徑，完全不需要複合索引）
     function loadMessages() {
       if (unsubscribeMessages) unsubscribeMessages();
-      messagesContainer.innerHTML = '<div class="text-center text-sm text-slate-400 py-10">正在同步雲端對話紀錄...</div>';
+      messagesContainer.innerHTML = '<div class="text-center text-sm text-slate-400 py-10">正在載入對話紀錄...</div>';
 
-      const selectedRoom = roomSelect.value;
-      const roomId = selectedRoom === 'personal' ? `personal_${currentUser.uid}` : 'general';
-
-      const q = query(
-        collection(db, "messages"),
-        where("roomId", "==", roomId),
-        orderBy("createdAt", "asc")
-      );
+      const roomId = roomSelect.value || 'general';
+      const messagesRef = collection(db, "rooms", roomId, "messages");
+      const q = query(messagesRef, orderBy("createdAt", "asc"));
 
       unsubscribeMessages = onSnapshot(q, (snapshot) => {
         messagesContainer.innerHTML = '';
         if (snapshot.empty) {
-          messagesContainer.innerHTML = '<div class="text-center text-sm text-slate-400 py-10">目前還沒有對話，傳送第一則訊息開始吧！</div>';
+          messagesContainer.innerHTML = '<div class="text-center text-sm text-slate-400 py-10">這個聊天室還沒有訊息，傳送第一句話開始吧！</div>';
           return;
         }
 
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          renderMessage(data);
+        snapshot.forEach((docSnap) => {
+          renderMessage(docSnap.data());
         });
 
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
       }, (error) => {
-        console.error("讀取訊息失敗:", error);
-        messagesContainer.innerHTML = `<div class="text-center text-xs text-red-500 py-6 px-4">讀取失敗：${error.message}<br>（若是首次使用需要建立索引，請開啟瀏覽器主控台點擊 Firebase 提供的索引建立連結，或確認 Firestore 已建立）</div>`;
+        messagesContainer.innerHTML = `<div class="text-center text-xs text-red-500 py-6 px-4">讀取失敗：${error.message}</div>`;
       });
     }
 
@@ -345,12 +383,11 @@
       messageInput.value = '';
       messageInput.style.height = 'auto';
 
-      const selectedRoom = roomSelect.value;
-      const roomId = selectedRoom === 'personal' ? `personal_${currentUser.uid}` : 'general';
+      const roomId = roomSelect.value || 'general';
+      const messagesRef = collection(db, "rooms", roomId, "messages");
 
       try {
-        await addDoc(collection(db, "messages"), {
-          roomId,
+        await addDoc(messagesRef, {
           uid: currentUser.uid,
           displayName: currentUser.displayName,
           photoURL: currentUser.photoURL,
@@ -375,12 +412,11 @@
       this.style.height = (this.scrollHeight) + 'px';
     });
 
-    // 上傳檔案 / 相片 / 錄音共用函式
+    // 上傳檔案 / 相片 / 錄音
     function uploadFileAndSend(file, msgType, customFileName) {
       if (!file || !currentUser) return;
 
-      const selectedRoom = roomSelect.value;
-      const roomId = selectedRoom === 'personal' ? `personal_${currentUser.uid}` : 'general';
+      const roomId = roomSelect.value || 'general';
       const safeName = customFileName || file.name || `file_${Date.now()}`;
       const storagePath = `chat_uploads/${roomId}/${Date.now()}_${safeName}`;
       const storageRef = ref(storage, storagePath);
@@ -402,8 +438,8 @@
         },
         async () => {
           const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-          await addDoc(collection(db, "messages"), {
-            roomId,
+          const messagesRef = collection(db, "rooms", roomId, "messages");
+          await addDoc(messagesRef, {
             uid: currentUser.uid,
             displayName: currentUser.displayName,
             photoURL: currentUser.photoURL,
@@ -417,7 +453,6 @@
       );
     }
 
-    // 相片與檔案按鈕事件
     btnUploadImage.addEventListener('click', () => fileInputImage.click());
     fileInputImage.addEventListener('change', (e) => {
       if (e.target.files[0]) {
@@ -434,7 +469,7 @@
       }
     });
 
-    // 語音錄製功能（相容 iOS Safari 與桌面瀏覽器）
+    // 語音錄製功能
     btnStartRecord.addEventListener('click', async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -458,7 +493,7 @@
           recordingTimer.textContent = `${mins}:${secs}`;
         }, 1000);
       } catch (err) {
-        alert("無法啟動麥克風，請確認瀏覽器已允許麥克風權限，且網址為 HTTPS 加密連線。");
+        alert("無法啟動麥克風，請確認瀏覽器已允許麥克風權限。");
       }
     });
 
