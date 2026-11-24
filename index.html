@@ -2,13 +2,24 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>專屬跨裝置私密通訊室</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 引入 SheetJS 用於解析 Excel 檔案 -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
   <style>
-    body {
+    html, body {
+      height: 100dvh;
+      max-height: 100dvh;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       overscroll-behavior-y: none;
+    }
+    /* 適配 iPad / iPhone 底部安全距離 */
+    .pb-safe-area {
+      padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
     }
     @keyframes pulse-ring {
       0% { transform: scale(0.95); opacity: 0.8; }
@@ -18,9 +29,15 @@
     .recording-pulse {
       animation: pulse-ring 1.5s infinite ease-in-out;
     }
+    /* 聊天室背景遮罩確保文字清晰 */
+    #messages-container {
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
   </style>
 </head>
-<body class="bg-slate-100 text-slate-800 h-screen flex flex-col overflow-hidden">
+<body class="bg-slate-100 text-slate-800 flex flex-col">
 
   <!-- 登入畫面 -->
   <div id="login-screen" class="flex-1 flex flex-col items-center justify-center p-6 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 text-white">
@@ -31,7 +48,7 @@
         </svg>
       </div>
       <h1 class="text-2xl font-bold mb-2">跨裝置私密通訊室</h1>
-      <p class="text-sm text-slate-500 mb-6">支援 iPad 與手機同步登入、憑房間 ID 進入私密聊天室、保存對話、相片、檔案與語音。</p>
+      <p class="text-sm text-slate-500 mb-6">支援 iPad 與手機同步、群組權限與 Excel 匯入、自訂背景頭像及 AI 每日對話總結。</p>
 
       <button id="btn-google-login" class="w-full flex items-center justify-center gap-3 bg-white border border-slate-300 hover:bg-slate-50 active:scale-[0.98] text-slate-700 font-semibold py-3.5 px-4 rounded-xl shadow-sm transition-all">
         <svg class="w-5 h-5" viewBox="0 0 24 24">
@@ -47,102 +64,106 @@
   </div>
 
   <!-- 主聊天室畫面 -->
-  <div id="chat-screen" class="hidden flex-1 flex flex-col h-full max-w-4xl w-full mx-auto bg-white shadow-xl">
+  <div id="chat-screen" class="hidden flex-1 flex flex-col h-[100dvh] max-w-4xl w-full mx-auto bg-white shadow-xl overflow-hidden">
     
     <!-- 頂部導覽列 -->
-    <header class="bg-white border-b border-slate-200 px-3 sm:px-4 py-2.5 flex items-center justify-between shrink-0 z-10 gap-2">
-      <div class="flex items-center gap-2.5 min-w-0">
-        <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold shadow-sm shrink-0">
-          聊
-        </div>
+    <header class="bg-white/95 backdrop-blur border-b border-slate-200 px-3 py-2 flex items-center justify-between shrink-0 z-10 gap-2">
+      <div class="flex items-center gap-2 min-w-0">
+        <!-- 群組頭像 -->
+        <img id="room-avatar-img" src="https://ui-avatars.com/api/?name=聊&background=4f46e5&color=fff" alt="群組頭像" class="w-9 h-9 rounded-full object-cover border border-slate-200 shrink-0" />
+        
         <div class="min-w-0">
-          <div class="flex items-center gap-1.5 flex-wrap">
-            <select id="room-select" class="text-xs sm:text-sm bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 font-semibold text-indigo-700 focus:outline-none max-w-[150px] sm:max-w-[220px] truncate">
+          <div class="flex items-center gap-1 flex-wrap">
+            <select id="room-select" class="text-xs sm:text-sm bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 font-semibold text-indigo-700 focus:outline-none max-w-[130px] sm:max-w-[200px] truncate">
             </select>
-            <button id="btn-new-room" title="建立私密聊天室" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 rounded-lg font-medium transition-colors shrink-0">
+            <button id="btn-new-room" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 rounded-lg font-medium shrink-0">
               + 建立
             </button>
-            <button id="btn-join-room" title="輸入房間 ID 加入" class="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-2 py-1 rounded-lg font-medium transition-colors shrink-0">
+            <button id="btn-join-room" class="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-2 py-1 rounded-lg font-medium shrink-0">
               🔑 加入
             </button>
+            <button id="btn-room-settings" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded-lg font-medium shrink-0">
+              ⚙️ 群組設定
+            </button>
           </div>
-          <!-- 顯示目前房間 ID 方便分享 -->
-          <div id="room-id-bar" class="hidden flex items-center gap-1.5 mt-1">
-            <span class="text-[11px] text-slate-500">房間 ID：<strong id="current-room-id-text" class="text-slate-700 font-mono select-all"></strong></span>
-            <button id="btn-copy-room-id" class="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">
-              複製 ID
+          <!-- 房間 ID 與 AI 總結按鈕 -->
+          <div class="flex items-center gap-2 mt-1">
+            <div id="room-id-bar" class="hidden flex items-center gap-1">
+              <span class="text-[11px] text-slate-500">ID:<strong id="current-room-id-text" class="text-slate-700 font-mono"></strong></span>
+              <button id="btn-copy-room-id" class="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">複製</button>
+            </div>
+            <button id="btn-ai-summary" class="text-[11px] bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+              <span>✨ AI 總結今日</span>
             </button>
           </div>
         </div>
       </div>
 
-      <div class="flex items-center gap-2 shrink-0">
-        <div class="hidden sm:flex items-center gap-2 text-right">
-          <div>
-            <p id="user-name" class="text-xs font-semibold text-slate-700"></p>
-            <p id="user-email" class="text-[11px] text-slate-400"></p>
-          </div>
-          <img id="user-avatar" src="" alt="頭像" class="w-8 h-8 rounded-full border border-slate-200 object-cover" />
-        </div>
-        <button id="btn-logout" class="text-xs bg-slate-100 hover:bg-red-50 hover:text-red-600 text-slate-600 px-2.5 py-1.5 rounded-lg font-medium transition-colors">
+      <!-- 右上角個人資料與登出 -->
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button id="btn-profile-settings" title="修改個人頭像與暱稱" class="flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-2 py-1 rounded-full transition-colors">
+          <img id="user-avatar" src="" alt="頭像" class="w-6 h-6 rounded-full object-cover" />
+          <span id="user-name" class="text-xs font-semibold text-slate-700 max-w-[70px] truncate"></span>
+        </button>
+        <button id="btn-logout" class="text-xs bg-slate-100 hover:bg-red-50 hover:text-red-600 text-slate-600 px-2 py-1.5 rounded-lg font-medium">
           登出
         </button>
       </div>
     </header>
 
-    <!-- 訊息顯示區 -->
-    <main id="messages-container" class="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
+    <!-- 訊息顯示區（自動佔滿剩餘空間，不會推擠底部輸入框） -->
+    <main id="messages-container" class="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-3 bg-slate-50 relative">
       <div id="loading-messages" class="text-center text-sm text-slate-400 py-10">
         正在載入雲端對話紀錄...
       </div>
     </main>
 
     <!-- 上傳進度條 -->
-    <div id="upload-progress-bar" class="hidden bg-indigo-50 px-4 py-2 border-t border-indigo-100 flex items-center justify-between text-xs text-indigo-700">
-      <span id="upload-status-text">正在上傳檔案至雲端...</span>
+    <div id="upload-progress-bar" class="hidden bg-indigo-50 px-4 py-1.5 border-t border-indigo-100 flex items-center justify-between text-xs text-indigo-700 shrink-0">
+      <span id="upload-status-text">正在上傳...</span>
       <span id="upload-percent" class="font-bold">0%</span>
     </div>
 
     <!-- 錄音中提示列 -->
-    <div id="recording-bar" class="hidden bg-red-50 px-4 py-3 border-t border-red-200 flex items-center justify-between">
-      <div class="flex items-center gap-3">
+    <div id="recording-bar" class="hidden bg-red-50 px-4 py-3 pb-safe-area border-t border-red-200 flex items-center justify-between shrink-0">
+      <div class="flex items-center gap-2.5">
         <span class="w-3 h-3 rounded-full bg-red-500 recording-pulse"></span>
-        <span class="text-sm font-medium text-red-700">正在錄音... <span id="recording-timer">00:00</span></span>
+        <span class="text-sm font-medium text-red-700">錄音中 <span id="recording-timer">00:00</span></span>
       </div>
       <div class="flex items-center gap-2">
-        <button id="btn-cancel-record" class="px-3 py-1 text-xs bg-white border border-slate-300 rounded-lg text-slate-600 hover:bg-slate-100">取消</button>
-        <button id="btn-send-record" class="px-3 py-1 text-xs bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 shadow-sm">傳送錄音</button>
+        <button id="btn-cancel-record" class="px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg text-slate-600">取消</button>
+        <button id="btn-send-record" class="px-3 py-1.5 text-xs bg-red-600 text-white rounded-lg font-medium shadow-sm">傳送錄音</button>
       </div>
     </div>
 
-    <!-- 底部輸入列 -->
-    <footer id="input-footer" class="bg-white border-t border-slate-200 p-3 shrink-0">
-      <div class="flex items-end gap-2">
+    <!-- 底部輸入列（加高並適配安全邊距，確保 iPad 與手機清晰可見） -->
+    <footer id="input-footer" class="bg-white border-t border-slate-200 px-3 pt-2.5 pb-safe-area shrink-0 shadow-[0_-2px_10px_rgba(0,0,0,0.03)]">
+      <div class="flex items-center gap-1.5 sm:gap-2">
         <input type="file" id="file-input-image" accept="image/*" class="hidden" />
         <input type="file" id="file-input-doc" class="hidden" />
 
-        <button id="btn-upload-image" title="傳送相片" class="p-2.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors shrink-0">
+        <button id="btn-upload-image" title="傳送相片" class="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl shrink-0">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
           </svg>
         </button>
 
-        <button id="btn-upload-doc" title="傳送檔案" class="p-2.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors shrink-0">
+        <button id="btn-upload-doc" title="傳送檔案" class="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl shrink-0">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
           </svg>
         </button>
 
-        <textarea id="message-input" rows="1" placeholder="輸入訊息..." class="flex-1 bg-slate-100 border-0 rounded-2xl px-4 py-2.5 text-sm text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white resize-none max-h-32 overflow-y-auto"></textarea>
+        <textarea id="message-input" rows="1" placeholder="輸入訊息..." class="flex-1 bg-slate-100 border border-slate-200 rounded-2xl px-3.5 py-2 text-sm text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white resize-none max-h-28 overflow-y-auto"></textarea>
 
-        <button id="btn-start-record" title="錄製語音" class="p-2.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors shrink-0">
+        <button id="btn-start-record" title="錄製語音" class="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl shrink-0">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
           </svg>
         </button>
 
-        <button id="btn-send-text" class="p-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl shadow-sm transition-all shrink-0">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <button id="btn-send-text" class="p-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl shadow-sm shrink-0">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
           </svg>
         </button>
@@ -150,11 +171,120 @@
     </footer>
   </div>
 
-  <!-- Firebase SDK (模組化 v10) -->
+  <!-- 彈窗 1：個人設定（修改暱稱與頭像） -->
+  <div id="modal-profile" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4">
+      <div class="flex justify-between items-center border-b pb-2">
+        <h3 class="font-bold text-base">個人資料設定</h3>
+        <button id="close-modal-profile" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+      </div>
+      <div class="flex flex-col items-center gap-2">
+        <img id="preview-user-avatar" src="" class="w-20 h-20 rounded-full object-cover border-2 border-indigo-200" />
+        <label class="text-xs bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg cursor-pointer font-medium hover:bg-indigo-100">
+          更換個人頭像
+          <input type="file" id="input-user-avatar" accept="image/*" class="hidden" />
+        </label>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">顯示暱稱</label>
+        <input type="text" id="input-user-nickname" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+      </div>
+      <button id="btn-save-profile" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl text-sm">
+        儲存個人設定
+      </button>
+    </div>
+  </div>
+
+  <!-- 彈窗 2：群組設定（改名、改頭像背景、加入成員 & Excel 匯入） -->
+  <div id="modal-room" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4 max-h-[88dvh] overflow-y-auto">
+      <div class="flex justify-between items-center border-b pb-2">
+        <h3 class="font-bold text-base">群組設定與成員管理</h3>
+        <button id="close-modal-room" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+      </div>
+
+      <!-- 群組名稱 -->
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">修改群組名稱</label>
+        <div class="flex gap-2">
+          <input type="text" id="input-room-name" class="flex-1 border border-slate-300 rounded-xl px-3 py-2 text-sm" />
+          <button id="btn-save-room-name" class="bg-indigo-600 text-white px-3 py-2 rounded-xl text-xs font-medium shrink-0">更新名稱</button>
+        </div>
+      </div>
+
+      <!-- 群組頭像與背景 -->
+      <div class="grid grid-cols-2 gap-3 pt-1">
+        <div class="border border-slate-200 rounded-xl p-3 text-center">
+          <p class="text-xs font-medium text-slate-600 mb-2">群組頭像</p>
+          <label class="inline-block text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg cursor-pointer">
+            上傳新頭像
+            <input type="file" id="input-room-avatar" accept="image/*" class="hidden" />
+          </label>
+        </div>
+        <div class="border border-slate-200 rounded-xl p-3 text-center">
+          <p class="text-xs font-medium text-slate-600 mb-2">聊天室背景</p>
+          <div class="flex justify-center gap-1">
+            <label class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1.5 rounded-lg cursor-pointer">
+              上傳背景
+              <input type="file" id="input-room-bg" accept="image/*" class="hidden" />
+            </label>
+            <button id="btn-clear-room-bg" class="text-xs text-red-500 px-1.5 py-1">清除</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 創建者專屬：新增成員與 Excel 匯入 -->
+      <div id="creator-member-section" class="border-t pt-3 space-y-3">
+        <p class="text-xs font-bold text-indigo-700">👑 創建者專屬：將其他人加入群組</p>
+        <p class="text-[11px] text-slate-500">輸入對方的 Google Email，對方登入後選單就會自動出現此群組。</p>
+        
+        <div class="flex gap-2">
+          <input type="email" id="input-invite-email" placeholder="example@gmail.com" class="flex-1 border border-slate-300 rounded-xl px-3 py-2 text-xs" />
+          <button id="btn-add-single-member" class="bg-emerald-600 text-white px-3 py-2 rounded-xl text-xs font-medium shrink-0">加入</button>
+        </div>
+
+        <div class="bg-slate-50 border border-dashed border-slate-300 rounded-xl p-3 text-center">
+          <p class="text-xs font-medium text-slate-700 mb-1">📊 透過 Excel 批次匯入成員</p>
+          <p class="text-[11px] text-slate-400 mb-2">支援 .xlsx / .xls / .csv，系統會自動讀取表格中的所有 Email</p>
+          <label class="inline-block text-xs bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg cursor-pointer font-medium shadow-sm">
+            選擇 Excel 檔案匯入
+            <input type="file" id="input-excel-members" accept=".xlsx,.xls,.csv" class="hidden" />
+          </label>
+          <p id="excel-import-status" class="text-[11px] text-emerald-600 mt-1.5 font-medium"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 彈窗 3：AI 總結今日對話 -->
+  <div id="modal-ai" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-3 max-h-[85dvh] flex flex-col">
+      <div class="flex justify-between items-center border-b pb-2 shrink-0">
+        <h3 class="font-bold text-base flex items-center gap-1.5">✨ AI 今日對話重點總結</h3>
+        <button id="close-modal-ai" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+      </div>
+      
+      <div id="ai-summary-content" class="flex-1 overflow-y-auto text-sm text-slate-700 bg-amber-50/60 border border-amber-100 rounded-xl p-3.5 whitespace-pre-wrap leading-relaxed">
+        正在分析今天的對話內容...
+      </div>
+
+      <div class="border-t pt-2.5 shrink-0">
+        <details class="text-xs text-slate-500">
+          <summary class="cursor-pointer font-medium text-indigo-600">進階：設定 Gemini API Key（可選，啟用深度 AI 摘要）</summary>
+          <div class="mt-2 flex gap-1.5">
+            <input type="password" id="input-gemini-key" placeholder="貼上 AIzaSy... 金鑰" class="flex-1 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs" />
+            <button id="btn-save-gemini-key" class="bg-indigo-600 text-white px-2.5 py-1.5 rounded-lg text-xs">儲存</button>
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase SDK -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-    import { getFirestore, collection, addDoc, setDoc, getDoc, doc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, setDoc, getDoc, getDocs, updateDoc, doc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
     const USER_FIREBASE_CONFIG = {
@@ -173,74 +303,63 @@
     const storage = getStorage(app);
     const provider = new GoogleAuthProvider();
 
-    const loginScreen = document.getElementById('login-screen');
-    const chatScreen = document.getElementById('chat-screen');
-    const btnGoogleLogin = document.getElementById('btn-google-login');
-    const btnLogout = document.getElementById('btn-logout');
-    const loginError = document.getElementById('login-error');
-    const roomSelect = document.getElementById('room-select');
-    const btnNewRoom = document.getElementById('btn-new-room');
-    const btnJoinRoom = document.getElementById('btn-join-room');
-    const roomIdBar = document.getElementById('room-id-bar');
-    const currentRoomIdText = document.getElementById('current-room-id-text');
-    const btnCopyRoomId = document.getElementById('btn-copy-room-id');
-    const messagesContainer = document.getElementById('messages-container');
-    const messageInput = document.getElementById('message-input');
-    const btnSendText = document.getElementById('btn-send-text');
-    const btnUploadImage = document.getElementById('btn-upload-image');
-    const btnUploadDoc = document.getElementById('btn-upload-doc');
-    const fileInputImage = document.getElementById('file-input-image');
-    const fileInputDoc = document.getElementById('file-input-doc');
-    const uploadProgressBar = document.getElementById('upload-progress-bar');
-    const uploadStatusText = document.getElementById('upload-status-text');
-    const uploadPercent = document.getElementById('upload-percent');
-
-    const btnStartRecord = document.getElementById('btn-start-record');
-    const recordingBar = document.getElementById('recording-bar');
-    const inputFooter = document.getElementById('input-footer');
-    const recordingTimer = document.getElementById('recording-timer');
-    const btnCancelRecord = document.getElementById('btn-cancel-record');
-    const btnSendRecord = document.getElementById('btn-send-record');
-
+    // 狀態變數
     let currentUser = null;
+    let userProfile = { displayName: "", photoURL: "" };
+    let currentRoomMeta = null;
+    let todayMessagesCache = [];
     let unsubscribeMessages = null;
     let unsubscribeMyRooms = null;
+    let unsubscribeRoomMeta = null;
     let mediaRecorder = null;
     let audioChunks = [];
     let recordInterval = null;
     let recordSeconds = 0;
 
-    // 產生 6 碼大寫英數字房間 ID
+    // DOM 元素
+    const loginScreen = document.getElementById('login-screen');
+    const chatScreen = document.getElementById('chat-screen');
+    const roomSelect = document.getElementById('room-select');
+    const roomIdBar = document.getElementById('room-id-bar');
+    const currentRoomIdText = document.getElementById('current-room-id-text');
+    const btnRoomSettings = document.getElementById('btn-room-settings');
+    const roomAvatarImg = document.getElementById('room-avatar-img');
+    const messagesContainer = document.getElementById('messages-container');
+    const messageInput = document.getElementById('message-input');
+    const uploadProgressBar = document.getElementById('upload-progress-bar');
+    const uploadStatusText = document.getElementById('upload-status-text');
+    const uploadPercent = document.getElementById('upload-percent');
+
     function generateRoomId() {
       const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
       let result = '';
-      for (let i = 0; i < 6; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
+      for (let i = 0; i < 6; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
       return result;
     }
 
-    // Google 登入
-    btnGoogleLogin.addEventListener('click', async () => {
-      loginError.classList.add('hidden');
+    function normalizeEmail(email) {
+      return email.trim().toLowerCase();
+    }
+
+    // 登入與登出
+    document.getElementById('btn-google-login').addEventListener('click', async () => {
       try {
         await signInWithPopup(auth, provider);
       } catch (error) {
-        loginError.textContent = "登入失敗：" + error.message;
-        loginError.classList.remove('hidden');
+        const errEl = document.getElementById('login-error');
+        errEl.textContent = "登入失敗：" + error.message;
+        errEl.classList.remove('hidden');
       }
     });
-
-    btnLogout.addEventListener('click', () => signOut(auth));
+    document.getElementById('btn-logout').addEventListener('click', () => signOut(auth));
 
     // 監聽登入狀態
-    onAuthStateChanged(auth, (user) => {
+    onAuthStateChanged(auth, async (user) => {
       if (user) {
         currentUser = user;
-        document.getElementById('user-name').textContent = user.displayName || "使用者";
-        document.getElementById('user-email').textContent = user.email;
-        document.getElementById('user-avatar').src = user.photoURL || "https://ui-avatars.com/api/?name=" + encodeURIComponent(user.displayName || "U");
-        
+        await loadOrInitUserProfile(user);
+        await checkPendingInvites(user.email);
+
         loginScreen.classList.add('hidden');
         chatScreen.classList.remove('hidden');
         loadMyJoinedRooms();
@@ -248,33 +367,74 @@
         currentUser = null;
         if (unsubscribeMessages) unsubscribeMessages();
         if (unsubscribeMyRooms) unsubscribeMyRooms();
+        if (unsubscribeRoomMeta) unsubscribeRoomMeta();
         chatScreen.classList.add('hidden');
         loginScreen.classList.remove('hidden');
       }
     });
 
-    // 只載入「我自己建立或加入過」的聊天室清單（跨裝置同步，其他人看不到）
+    // 載入或建立自訂個人資料（暱稱與頭像）
+    async function loadOrInitUserProfile(user) {
+      const profileRef = doc(db, "user_profiles", user.uid);
+      const snap = await getDoc(profileRef);
+      if (snap.exists()) {
+        userProfile = snap.data();
+      } else {
+        userProfile = {
+          displayName: user.displayName || "使用者",
+          photoURL: user.photoURL || "https://ui-avatars.com/api/?name=" + encodeURIComponent(user.displayName || "U"),
+          email: normalizeEmail(user.email)
+        };
+        await setDoc(profileRef, userProfile);
+      }
+      updateUserHeaderUI();
+    }
+
+    function updateUserHeaderUI() {
+      document.getElementById('user-name').textContent = userProfile.displayName;
+      document.getElementById('user-avatar').src = userProfile.photoURL;
+    }
+
+    // 檢查是否有創建者透過 Email / Excel 邀請我加入的群組
+    async function checkPendingInvites(email) {
+      if (!email) return;
+      const cleanEmail = normalizeEmail(email);
+      const invitesSnap = await getDocs(collection(db, "email_invites", cleanEmail, "rooms"));
+      for (const invDoc of invitesSnap.docs) {
+        const roomId = invDoc.id;
+        const roomSnap = await getDoc(doc(db, "private_rooms", roomId));
+        if (roomSnap.exists()) {
+          await setDoc(doc(db, "users", currentUser.uid, "joined_rooms", roomId), {
+            name: roomSnap.data().name,
+            joinedAt: serverTimestamp()
+          }, { merge: true });
+        }
+      }
+    }
+
+    // 載入我的聊天室列表
     function loadMyJoinedRooms() {
       if (unsubscribeMyRooms) unsubscribeMyRooms();
       const myRoomsQuery = query(collection(db, "users", currentUser.uid, "joined_rooms"), orderBy("joinedAt", "asc"));
 
-      unsubscribeMyRooms = onSnapshot(myRoomsQuery, (snapshot) => {
+      unsubscribeMyRooms = onSnapshot(myRoomsQuery, async (snapshot) => {
         const previousSelected = roomSelect.value;
         const personalId = `personal_${currentUser.uid}`;
 
-        roomSelect.innerHTML = `
-          <option value="${personalId}">📝 我的私人筆記 (僅自己)</option>
-        `;
+        roomSelect.innerHTML = `<option value="${personalId}">📝 我的私人筆記</option>`;
 
-        snapshot.forEach((docSnap) => {
-          const roomData = docSnap.data();
+        for (const docSnap of snapshot.docs) {
+          const roomId = docSnap.id;
+          // 讀取最新群組名稱（若群組改名會同步更新）
+          const latestRoomSnap = await getDoc(doc(db, "private_rooms", roomId));
+          const displayName = latestRoomSnap.exists() ? latestRoomSnap.data().name : docSnap.data().name;
+          
           const opt = document.createElement('option');
-          opt.value = docSnap.id;
-          opt.textContent = `🔒 ${roomData.name}`;
+          opt.value = roomId;
+          opt.textContent = `🔒 ${displayName}`;
           roomSelect.appendChild(opt);
-        });
+        }
 
-        // 恢復選取或預設選第一個私密房間
         if (previousSelected && [...roomSelect.options].some(o => o.value === previousSelected)) {
           roomSelect.value = previousSelected;
         } else if (!snapshot.empty) {
@@ -283,178 +443,170 @@
           roomSelect.value = personalId;
         }
 
-        updateRoomIdDisplay();
-        loadMessages();
+        onRoomChanged();
       });
     }
 
-    // 更新頂部的房間 ID 顯示欄
-    function updateRoomIdDisplay() {
-      const selectedId = roomSelect.value;
-      if (selectedId && !selectedId.startsWith('personal_')) {
-        currentRoomIdText.textContent = selectedId;
+    roomSelect.addEventListener('change', onRoomChanged);
+
+    function onRoomChanged() {
+      const roomId = roomSelect.value;
+      if (unsubscribeRoomMeta) unsubscribeRoomMeta();
+
+      if (roomId && !roomId.startsWith('personal_')) {
+        currentRoomIdText.textContent = roomId;
         roomIdBar.classList.remove('hidden');
+        btnRoomSettings.classList.remove('hidden');
+
+        // 即時監聽群組設定（名稱、頭像、背景、創建者）
+        unsubscribeRoomMeta = onSnapshot(doc(db, "private_rooms", roomId), (docSnap) => {
+          if (docSnap.exists()) {
+            currentRoomMeta = docSnap.data();
+            // 更新選單文字
+            const selectedOpt = roomSelect.querySelector(`option[value="${roomId}"]`);
+            if (selectedOpt) selectedOpt.textContent = `🔒 ${currentRoomMeta.name}`;
+
+            // 更新群組頭像
+            roomAvatarImg.src = currentRoomMeta.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentRoomMeta.name)}&background=4f46e5&color=fff`;
+
+            // 更新聊天室背景
+            if (currentRoomMeta.bgURL) {
+              messagesContainer.style.backgroundImage = `linear-gradient(rgba(255,255,255,0.75), rgba(255,255,255,0.75)), url('${currentRoomMeta.bgURL}')`;
+            } else {
+              messagesContainer.style.backgroundImage = 'none';
+            }
+          }
+        });
       } else {
+        currentRoomMeta = null;
         roomIdBar.classList.add('hidden');
+        btnRoomSettings.classList.add('hidden');
+        roomAvatarImg.src = "https://ui-avatars.com/api/?name=筆&background=4f46e5&color=fff";
+        messagesContainer.style.backgroundImage = 'none';
       }
+
+      loadMessages();
     }
 
-    // 複製房間 ID 按鈕
-    btnCopyRoomId.addEventListener('click', () => {
-      const idText = currentRoomIdText.textContent;
-      if (idText) {
-        navigator.clipboard.writeText(idText);
-        btnCopyRoomId.textContent = "已複製！";
-        setTimeout(() => { btnCopyRoomId.textContent = "複製 ID"; }, 1500);
-      }
+    // 複製房間 ID
+    document.getElementById('btn-copy-room-id').addEventListener('click', () => {
+      navigator.clipboard.writeText(currentRoomIdText.textContent);
+      const btn = document.getElementById('btn-copy-room-id');
+      btn.textContent = "已複製";
+      setTimeout(() => btn.textContent = "複製", 1500);
     });
 
-    // 1. 建立私密聊天室
-    btnNewRoom.addEventListener('click', async () => {
-      const roomName = prompt("請輸入新聊天室的名稱（例如：我和XX的秘密基地）：");
+    // 建立新聊天室
+    document.getElementById('btn-new-room').addEventListener('click', async () => {
+      const roomName = prompt("請輸入新群組名稱：");
       if (!roomName || !roomName.trim()) return;
 
       const cleanName = roomName.trim();
       const newRoomId = generateRoomId();
 
-      try {
-        // 在系統建立房間資料
-        await setDoc(doc(db, "private_rooms", newRoomId), {
-          name: cleanName,
-          createdBy: currentUser.uid,
-          createdAt: serverTimestamp()
-        });
+      await setDoc(doc(db, "private_rooms", newRoomId), {
+        name: cleanName,
+        createdBy: currentUser.uid,
+        createdAt: serverTimestamp()
+      });
 
-        // 將此房間加入自己的清單（iPad 與手機同步）
-        await setDoc(doc(db, "users", currentUser.uid, "joined_rooms", newRoomId), {
-          name: cleanName,
-          joinedAt: serverTimestamp()
-        });
+      await setDoc(doc(db, "users", currentUser.uid, "joined_rooms", newRoomId), {
+        name: cleanName,
+        joinedAt: serverTimestamp()
+      });
 
-        roomSelect.value = newRoomId;
-        updateRoomIdDisplay();
-        loadMessages();
-        alert(`聊天室「${cleanName}」已建立！\n\n專屬房間 ID 為：${newRoomId}\n請把這組 ID 傳給你的朋友，他輸入 ID 後就能進來！`);
-      } catch (error) {
-        alert("建立失敗：" + error.message);
-      }
+      roomSelect.value = newRoomId;
+      onRoomChanged();
+      alert(`群組「${cleanName}」建立成功！\n房間 ID：${newRoomId}`);
     });
 
-    // 2. 輸入房間 ID 加入朋友的聊天室
-    btnJoinRoom.addEventListener('click', async () => {
-      const inputId = prompt("請輸入朋友給你的 6 碼房間 ID：");
+    // 憑房間 ID 加入
+    document.getElementById('btn-join-room').addEventListener('click', async () => {
+      const inputId = prompt("請輸入 6 碼房間 ID：");
       if (!inputId || !inputId.trim()) return;
-
       const cleanId = inputId.trim().toUpperCase();
 
-      try {
-        const roomRef = doc(db, "private_rooms", cleanId);
-        const roomSnap = await getDoc(roomRef);
-
-        if (!roomSnap.exists()) {
-          alert("找不到這個房間 ID，請確認是否輸入正確！");
-          return;
-        }
-
-        const roomData = roomSnap.data();
-        // 儲存到自己的已加入清單中，之後開啟網頁直接切換即可
-        await setDoc(doc(db, "users", currentUser.uid, "joined_rooms", cleanId), {
-          name: roomData.name,
-          joinedAt: serverTimestamp()
-        });
-
-        roomSelect.value = cleanId;
-        updateRoomIdDisplay();
-        loadMessages();
-      } catch (error) {
-        alert("加入失敗：" + error.message);
+      const roomSnap = await getDoc(doc(db, "private_rooms", cleanId));
+      if (!roomSnap.exists()) {
+        alert("找不到此房間 ID，請確認輸入是否正確！");
+        return;
       }
+
+      await setDoc(doc(db, "users", currentUser.uid, "joined_rooms", cleanId), {
+        name: roomSnap.data().name,
+        joinedAt: serverTimestamp()
+      });
+
+      roomSelect.value = cleanId;
+      onRoomChanged();
     });
 
-    // 切換聊天室
-    roomSelect.addEventListener('change', () => {
-      if (currentUser) {
-        updateRoomIdDisplay();
-        loadMessages();
-      }
-    });
-
-    // 載入訊息
+    // 載入訊息與快取今日對話
     function loadMessages() {
       if (unsubscribeMessages) unsubscribeMessages();
-      messagesContainer.innerHTML = '<div class="text-center text-sm text-slate-400 py-10">正在載入對話紀錄...</div>';
+      messagesContainer.innerHTML = '<div class="text-center text-sm text-slate-400 py-10">載入對話中...</div>';
 
       const roomId = roomSelect.value;
-      const messagesRef = collection(db, "rooms", roomId, "messages");
-      const q = query(messagesRef, orderBy("createdAt", "asc"));
+      const q = query(collection(db, "rooms", roomId, "messages"), orderBy("createdAt", "asc"));
 
       unsubscribeMessages = onSnapshot(q, (snapshot) => {
         messagesContainer.innerHTML = '';
+        todayMessagesCache = [];
+        const todayStr = new Date().toDateString();
+
         if (snapshot.empty) {
-          messagesContainer.innerHTML = '<div class="text-center text-sm text-slate-400 py-10">這個聊天室還沒有訊息，傳送第一句話開始吧！</div>';
+          messagesContainer.innerHTML = '<div class="text-center text-sm text-slate-500 bg-white/80 rounded-xl py-4 px-6 mx-auto w-fit mt-10">尚無訊息，開始聊天吧！</div>';
           return;
         }
 
         snapshot.forEach((docSnap) => {
-          renderMessage(docSnap.data());
+          const data = docSnap.data();
+          renderMessage(data);
+
+          // 收集今天的文字訊息供 AI 總結
+          if (data.createdAt && data.createdAt.toDate().toDateString() === todayStr && data.type === 'text') {
+            const time = data.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            todayMessagesCache.push(`[${time}] ${data.displayName}: ${data.text}`);
+          }
         });
 
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
-      }, (error) => {
-        messagesContainer.innerHTML = `<div class="text-center text-xs text-red-500 py-6 px-4">讀取失敗：${error.message}</div>`;
       });
     }
 
-    // 渲染單則訊息
     function renderMessage(data) {
       const isMine = data.uid === currentUser.uid;
       const wrapper = document.createElement('div');
-      wrapper.className = `flex gap-2.5 ${isMine ? 'flex-row-reverse' : 'flex-row'}`;
+      wrapper.className = `flex gap-2 ${isMine ? 'flex-row-reverse' : 'flex-row'}`;
 
       const avatarUrl = data.photoURL || "https://ui-avatars.com/api/?name=" + encodeURIComponent(data.displayName || "U");
-      const timeStr = data.createdAt ? new Date(data.createdAt.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '傳送中...';
+      const timeStr = data.createdAt ? new Date(data.createdAt.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '傳送中';
 
       let contentHtml = '';
       if (data.type === 'text') {
         contentHtml = `<p class="whitespace-pre-wrap break-words text-sm leading-relaxed">${escapeHtml(data.text)}</p>`;
       } else if (data.type === 'image') {
-        contentHtml = `
-          <a href="${data.fileUrl}" target="_blank" rel="noopener noreferrer">
-            <img src="${data.fileUrl}" alt="相片" class="max-w-[240px] sm:max-w-xs rounded-xl border border-black/10 object-cover cursor-pointer hover:opacity-95" />
-          </a>`;
+        contentHtml = `<a href="${data.fileUrl}" target="_blank"><img src="${data.fileUrl}" class="max-w-[220px] sm:max-w-xs rounded-xl object-cover" /></a>`;
       } else if (data.type === 'audio') {
-        contentHtml = `
-          <div class="flex items-center gap-2 min-w-[200px]">
-            <audio controls src="${data.fileUrl}" class="h-9 w-56 max-w-full"></audio>
-          </div>`;
+        contentHtml = `<audio controls src="${data.fileUrl}" class="h-9 w-52 max-w-full"></audio>`;
       } else if (data.type === 'file') {
-        contentHtml = `
-          <a href="${data.fileUrl}" target="_blank" rel="noopener noreferrer" class="flex items-center gap-2.5 p-2 rounded-lg ${isMine ? 'bg-indigo-700/50 hover:bg-indigo-700' : 'bg-slate-100 hover:bg-slate-200'} transition-colors">
-            <svg class="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
-            </svg>
-            <div class="overflow-hidden">
-              <p class="text-xs font-medium truncate max-w-[180px]">${escapeHtml(data.fileName || '下載檔案')}</p>
-              <p class="text-[10px] opacity-75">點擊開啟 / 下載</p>
-            </div>
-          </a>`;
+        contentHtml = `<a href="${data.fileUrl}" target="_blank" class="flex items-center gap-2 underline text-xs font-medium">📎 ${escapeHtml(data.fileName || '下載檔案')}</a>`;
       }
 
       wrapper.innerHTML = `
-        <img src="${avatarUrl}" alt="頭像" class="w-8 h-8 rounded-full object-cover shrink-0 mt-1 border border-slate-200" />
+        <img src="${avatarUrl}" class="w-8 h-8 rounded-full object-cover shrink-0 mt-1 border border-slate-200 bg-white" />
         <div class="flex flex-col ${isMine ? 'items-end' : 'items-start'} max-w-[78%]">
-          <span class="text-[11px] text-slate-400 mb-1 px-1">${escapeHtml(data.displayName || '使用者')}</span>
-          <div class="px-3.5 py-2.5 rounded-2xl shadow-sm ${isMine ? 'bg-indigo-600 text-white rounded-tr-sm' : 'bg-white text-slate-800 border border-slate-200 rounded-tl-sm'}">
+          <span class="text-[11px] text-slate-600 font-medium mb-0.5 px-1 bg-white/70 rounded">${escapeHtml(data.displayName || '使用者')}</span>
+          <div class="px-3.5 py-2 rounded-2xl shadow-sm ${isMine ? 'bg-indigo-600 text-white rounded-tr-sm' : 'bg-white text-slate-800 border border-slate-200 rounded-tl-sm'}">
             ${contentHtml}
           </div>
-          <span class="text-[10px] text-slate-400 mt-1 px-1">${timeStr}</span>
+          <span class="text-[10px] text-slate-500 mt-0.5 px-1 bg-white/70 rounded">${timeStr}</span>
         </div>
       `;
-
       messagesContainer.appendChild(wrapper);
     }
 
-    // 傳送文字訊息
+    // 傳送文字
     async function sendTextMessage() {
       const text = messageInput.value.trim();
       if (!text || !currentUser) return;
@@ -462,148 +614,338 @@
       messageInput.value = '';
       messageInput.style.height = 'auto';
 
-      const roomId = roomSelect.value;
-      const messagesRef = collection(db, "rooms", roomId, "messages");
-
-      try {
-        await addDoc(messagesRef, {
-          uid: currentUser.uid,
-          displayName: currentUser.displayName,
-          photoURL: currentUser.photoURL,
-          type: 'text',
-          text: text,
-          createdAt: serverTimestamp()
-        });
-      } catch (error) {
-        alert("傳送失敗：" + error.message);
-      }
+      await addDoc(collection(db, "rooms", roomSelect.value, "messages"), {
+        uid: currentUser.uid,
+        displayName: userProfile.displayName,
+        photoURL: userProfile.photoURL,
+        type: 'text',
+        text: text,
+        createdAt: serverTimestamp()
+      });
     }
 
-    btnSendText.addEventListener('click', sendTextMessage);
+    document.getElementById('btn-send-text').addEventListener('click', sendTextMessage);
     messageInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         sendTextMessage();
       }
     });
-    messageInput.addEventListener('input', function() {
-      this.style.height = 'auto';
-      this.style.height = (this.scrollHeight) + 'px';
-    });
 
-    // 上傳檔案 / 相片 / 錄音
-    function uploadFileAndSend(file, msgType, customFileName) {
-      if (!file || !currentUser) return;
-
-      const roomId = roomSelect.value;
-      const safeName = customFileName || file.name || `file_${Date.now()}`;
-      const storagePath = `chat_uploads/${roomId}/${Date.now()}_${safeName}`;
-      const storageRef = ref(storage, storagePath);
-
+    // 通用圖片/檔案上傳到 Storage
+    function uploadToStorage(file, path, onComplete) {
       uploadProgressBar.classList.remove('hidden');
-      uploadStatusText.textContent = `正在上傳：${safeName}`;
+      uploadStatusText.textContent = `正在上傳...`;
       uploadPercent.textContent = '0%';
 
-      const uploadTask = uploadBytesResumable(storageRef, file);
-
-      uploadTask.on('state_changed',
-        (snapshot) => {
-          const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-          uploadPercent.textContent = `${progress}%`;
+      const task = uploadBytesResumable(ref(storage, path), file);
+      task.on('state_changed',
+        (snap) => {
+          uploadPercent.textContent = `${Math.round((snap.bytesTransferred / snap.totalBytes) * 100)}%`;
         },
-        (error) => {
+        (err) => {
           uploadProgressBar.classList.add('hidden');
-          alert("上傳失敗：" + error.message + "（請確認已在 Firebase 後台啟用 Storage）");
+          alert("上傳失敗：" + err.message);
         },
         async () => {
-          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-          const messagesRef = collection(db, "rooms", roomId, "messages");
-          await addDoc(messagesRef, {
-            uid: currentUser.uid,
-            displayName: currentUser.displayName,
-            photoURL: currentUser.photoURL,
-            type: msgType,
-            fileUrl: downloadURL,
-            fileName: safeName,
-            createdAt: serverTimestamp()
-          });
+          const url = await getDownloadURL(task.snapshot.ref);
           uploadProgressBar.classList.add('hidden');
+          onComplete(url);
         }
       );
     }
 
-    btnUploadImage.addEventListener('click', () => fileInputImage.click());
-    fileInputImage.addEventListener('change', (e) => {
-      if (e.target.files[0]) {
-        uploadFileAndSend(e.target.files[0], 'image');
-        e.target.value = '';
-      }
+    // 聊天室傳送相片與檔案
+    document.getElementById('btn-upload-image').addEventListener('click', () => document.getElementById('file-input-image').click());
+    document.getElementById('file-input-image').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      uploadToStorage(file, `chat_uploads/${roomSelect.value}/${Date.now()}_${file.name}`, async (url) => {
+        await addDoc(collection(db, "rooms", roomSelect.value, "messages"), {
+          uid: currentUser.uid,
+          displayName: userProfile.displayName,
+          photoURL: userProfile.photoURL,
+          type: 'image',
+          fileUrl: url,
+          createdAt: serverTimestamp()
+        });
+      });
+      e.target.value = '';
     });
 
-    btnUploadDoc.addEventListener('click', () => fileInputDoc.click());
-    fileInputDoc.addEventListener('change', (e) => {
-      if (e.target.files[0]) {
-        uploadFileAndSend(e.target.files[0], 'file');
-        e.target.value = '';
-      }
+    document.getElementById('btn-upload-doc').addEventListener('click', () => document.getElementById('file-input-doc').click());
+    document.getElementById('file-input-doc').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      uploadToStorage(file, `chat_uploads/${roomSelect.value}/${Date.now()}_${file.name}`, async (url) => {
+        await addDoc(collection(db, "rooms", roomSelect.value, "messages"), {
+          uid: currentUser.uid,
+          displayName: userProfile.displayName,
+          photoURL: userProfile.photoURL,
+          type: 'file',
+          fileUrl: url,
+          fileName: file.name,
+          createdAt: serverTimestamp()
+        });
+      });
+      e.target.value = '';
     });
 
-    // 語音錄製功能
-    btnStartRecord.addEventListener('click', async () => {
+    // 語音錄製
+    document.getElementById('btn-start-record').addEventListener('click', async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         mediaRecorder = new MediaRecorder(stream);
         audioChunks = [];
-
-        mediaRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0) audioChunks.push(event.data);
-        };
-
+        mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
         mediaRecorder.start();
-        inputFooter.classList.add('hidden');
-        recordingBar.classList.remove('hidden');
 
+        document.getElementById('input-footer').classList.add('hidden');
+        document.getElementById('recording-bar').classList.remove('hidden');
         recordSeconds = 0;
-        recordingTimer.textContent = "00:00";
+        document.getElementById('recording-timer').textContent = "00:00";
         recordInterval = setInterval(() => {
           recordSeconds++;
-          const mins = String(Math.floor(recordSeconds / 60)).padStart(2, '0');
-          const secs = String(recordSeconds % 60).padStart(2, '0');
-          recordingTimer.textContent = `${mins}:${secs}`;
+          document.getElementById('recording-timer').textContent = `${String(Math.floor(recordSeconds / 60)).padStart(2, '0')}:${String(recordSeconds % 60).padStart(2, '0')}`;
         }, 1000);
       } catch (err) {
-        alert("無法啟動麥克風，請確認瀏覽器已允許麥克風權限。");
+        alert("無法啟動麥克風，請允許權限。");
       }
     });
 
-    function stopRecordingStream() {
+    function stopRecordingUI() {
       clearInterval(recordInterval);
-      if (mediaRecorder && mediaRecorder.stream) {
-        mediaRecorder.stream.getTracks().forEach(track => track.stop());
-      }
-      recordingBar.classList.add('hidden');
-      inputFooter.classList.remove('hidden');
+      if (mediaRecorder && mediaRecorder.stream) mediaRecorder.stream.getTracks().forEach(t => t.stop());
+      document.getElementById('recording-bar').classList.add('hidden');
+      document.getElementById('input-footer').classList.remove('hidden');
     }
 
-    btnCancelRecord.addEventListener('click', () => {
-      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-        mediaRecorder.onstop = null;
-        mediaRecorder.stop();
-      }
-      stopRecordingStream();
+    document.getElementById('btn-cancel-record').addEventListener('click', () => {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') { mediaRecorder.onstop = null; mediaRecorder.stop(); }
+      stopRecordingUI();
     });
 
-    btnSendRecord.addEventListener('click', () => {
+    document.getElementById('btn-send-record').addEventListener('click', () => {
       if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         mediaRecorder.onstop = () => {
           const mimeType = mediaRecorder.mimeType || 'audio/mp4';
           const ext = mimeType.includes('webm') ? 'webm' : 'm4a';
-          const audioBlob = new Blob(audioChunks, { type: mimeType });
-          uploadFileAndSend(audioBlob, 'audio', `voice_${Date.now()}.${ext}`);
+          const blob = new Blob(audioChunks, { type: mimeType });
+          uploadToStorage(blob, `chat_uploads/${roomSelect.value}/voice_${Date.now()}.${ext}`, async (url) => {
+            await addDoc(collection(db, "rooms", roomSelect.value, "messages"), {
+              uid: currentUser.uid,
+              displayName: userProfile.displayName,
+              photoURL: userProfile.photoURL,
+              type: 'audio',
+              fileUrl: url,
+              createdAt: serverTimestamp()
+            });
+          });
         };
         mediaRecorder.stop();
       }
-      stopRecordingStream();
+      stopRecordingUI();
+    });
+
+    // ================= 個人設定彈窗邏輯 =================
+    const modalProfile = document.getElementById('modal-profile');
+    document.getElementById('btn-profile-settings').addEventListener('click', () => {
+      document.getElementById('preview-user-avatar').src = userProfile.photoURL;
+      document.getElementById('input-user-nickname').value = userProfile.displayName;
+      modalProfile.classList.remove('hidden');
+    });
+    document.getElementById('close-modal-profile').addEventListener('click', () => modalProfile.classList.add('hidden'));
+
+    document.getElementById('input-user-avatar').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      uploadToStorage(file, `avatars/users/${currentUser.uid}_${Date.now()}`, async (url) => {
+        userProfile.photoURL = url;
+        document.getElementById('preview-user-avatar').src = url;
+        await updateDoc(doc(db, "user_profiles", currentUser.uid), { photoURL: url });
+        updateUserHeaderUI();
+      });
+    });
+
+    document.getElementById('btn-save-profile').addEventListener('click', async () => {
+      const newName = document.getElementById('input-user-nickname').value.trim();
+      if (!newName) return;
+      userProfile.displayName = newName;
+      await updateDoc(doc(db, "user_profiles", currentUser.uid), { displayName: newName });
+      updateUserHeaderUI();
+      modalProfile.classList.add('hidden');
+    });
+
+    // ================= 群組設定與 Excel 匯入邏輯 =================
+    const modalRoom = document.getElementById('modal-room');
+    btnRoomSettings.addEventListener('click', () => {
+      if (!currentRoomMeta) return;
+      document.getElementById('input-room-name').value = currentRoomMeta.name;
+      document.getElementById('excel-import-status').textContent = '';
+
+      // 只有群組創建者才看得到「加入成員與 Excel 匯入」區塊
+      const isCreator = currentRoomMeta.createdBy === currentUser.uid;
+      document.getElementById('creator-member-section').classList.toggle('hidden', !isCreator);
+
+      modalRoom.classList.remove('hidden');
+    });
+    document.getElementById('close-modal-room').addEventListener('click', () => modalRoom.classList.add('hidden'));
+
+    // 修改群組名稱
+    document.getElementById('btn-save-room-name').addEventListener('click', async () => {
+      const newName = document.getElementById('input-room-name').value.trim();
+      if (!newName) return;
+      await updateDoc(doc(db, "private_rooms", roomSelect.value), { name: newName });
+      alert("群組名稱已更新！");
+    });
+
+    // 修改群組頭像
+    document.getElementById('input-room-avatar').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      uploadToStorage(file, `rooms_assets/${roomSelect.value}/avatar_${Date.now()}`, async (url) => {
+        await updateDoc(doc(db, "private_rooms", roomSelect.value), { photoURL: url });
+        alert("群組頭像已更新！");
+      });
+    });
+
+    // 修改群組背景
+    document.getElementById('input-room-bg').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      uploadToStorage(file, `rooms_assets/${roomSelect.value}/bg_${Date.now()}`, async (url) => {
+        await updateDoc(doc(db, "private_rooms", roomSelect.value), { bgURL: url });
+        alert("聊天室背景已更新！");
+      });
+    });
+
+    document.getElementById('btn-clear-room-bg').addEventListener('click', async () => {
+      await updateDoc(doc(db, "private_rooms", roomSelect.value), { bgURL: "" });
+    });
+
+    // 邀請單一成員 Email
+    async function inviteEmailToRoom(email, roomId) {
+      const cleanEmail = normalizeEmail(email);
+      if (!cleanEmail || !cleanEmail.includes('@')) return false;
+      await setDoc(doc(db, "email_invites", cleanEmail, "rooms", roomId), {
+        invitedBy: currentUser.uid,
+        invitedAt: serverTimestamp()
+      });
+      return true;
+    }
+
+    document.getElementById('btn-add-single-member').addEventListener('click', async () => {
+      const emailInput = document.getElementById('input-invite-email');
+      const ok = await inviteEmailToRoom(emailInput.value, roomSelect.value);
+      if (ok) {
+        alert(`已將 ${emailInput.value.trim()} 加入群組！對方登入後即可直接看到此群組。`);
+        emailInput.value = '';
+      } else {
+        alert("請輸入有效的 Email 地址");
+      }
+    });
+
+    // Excel 批次匯入成員
+    document.getElementById('input-excel-members').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        try {
+          const data = new Uint8Array(evt.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+
+          // 從所有儲存格中自動提取合法的 Email
+          const foundEmails = new Set();
+          const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+
+          rows.forEach(row => {
+            row.forEach(cell => {
+              if (cell) {
+                const matches = String(cell).match(emailRegex);
+                if (matches) matches.forEach(m => foundEmails.add(normalizeEmail(m)));
+              }
+            });
+          });
+
+          if (foundEmails.size === 0) {
+            alert("在 Excel 中找不到任何 Email 地址，請確認檔案內容！");
+            return;
+          }
+
+          let count = 0;
+          for (const email of foundEmails) {
+            await inviteEmailToRoom(email, roomSelect.value);
+            count++;
+          }
+
+          document.getElementById('excel-import-status').textContent = `✅ 成功從 Excel 匯入並加入了 ${count} 位成員！`;
+        } catch (err) {
+          alert("讀取 Excel 失敗：" + err.message);
+        }
+      };
+      reader.readAsArrayBuffer(file);
+      e.target.value = '';
+    });
+
+    // ================= AI 總結今日對話邏輯 =================
+    const modalAi = document.getElementById('modal-ai');
+    const aiSummaryContent = document.getElementById('ai-summary-content');
+    const inputGeminiKey = document.getElementById('input-gemini-key');
+    inputGeminiKey.value = localStorage.getItem('user_gemini_api_key') || '';
+
+    document.getElementById('btn-save-gemini-key').addEventListener('click', () => {
+      localStorage.setItem('user_gemini_api_key', inputGeminiKey.value.trim());
+      alert("Gemini API Key 已儲存！");
+    });
+
+    document.getElementById('close-modal-ai').addEventListener('click', () => modalAi.classList.add('hidden'));
+
+    document.getElementById('btn-ai-summary').addEventListener('click', async () => {
+      modalAi.classList.remove('hidden');
+
+      if (todayMessagesCache.length === 0) {
+        aiSummaryContent.textContent = "今天在這個聊天室還沒有任何文字對話紀錄喔！";
+        return;
+      }
+
+      const apiKey = localStorage.getItem('user_gemini_api_key');
+      const chatLog = todayMessagesCache.join('\n');
+
+      if (apiKey) {
+        aiSummaryContent.textContent = "✨ 正在使用 Gemini AI 深度分析今天的對話重點...";
+        try {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                parts: [{
+                  text: `請用繁體中文幫我條列式總結以下今天的聊天室對話重點、討論事項與結論：\n\n${chatLog}`
+                }]
+              }]
+            })
+          });
+          const result = await response.json();
+          const summaryText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+          aiSummaryContent.textContent = summaryText || "AI 分析完成，但未回傳內容，請檢查 API Key 是否正確。";
+        } catch (err) {
+          aiSummaryContent.textContent = "連線 AI 失敗：" + err.message;
+        }
+      } else {
+        // 內建免金鑰快速重点摘要
+        const participants = [...new Set(todayMessagesCache.map(line => line.split('] ')[1]?.split(':')[0]))];
+        const recentLines = todayMessagesCache.slice(-8).join('\n');
+        aiSummaryContent.textContent =
+          `📅 今日對話統計（${new Date().toLocaleDateString()}）\n` +
+          `• 總訊息數：${todayMessagesCache.length} 則文字訊息\n` +
+          `• 參與成員：${participants.join('、')}\n\n` +
+          `📌 今日最新對話重點摘錄：\n${recentLines}\n\n` +
+          `💡 提示：若在下方填入免費的 Gemini API Key，即可啟用完整語意智慧摘要！`;
+      }
     });
 
     function escapeHtml(str) {
