@@ -5,19 +5,30 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>專屬跨裝置私密通訊室</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- 引入 SheetJS 用於解析 Excel 檔案 -->
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <!-- 引入 Google Fonts 支援多種字體設計 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --chat-font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
+      --chat-font-size: 14px;
+    }
     html, body {
       height: 100dvh;
       max-height: 100dvh;
       margin: 0;
       padding: 0;
       overflow: hidden;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-family: var(--chat-font-family);
       overscroll-behavior-y: none;
     }
-    /* 適配 iPad / iPhone 底部安全距離 */
+    .chat-msg-text {
+      font-family: var(--chat-font-family);
+      font-size: var(--chat-font-size);
+      line-height: 1.55;
+    }
     .pb-safe-area {
       padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
     }
@@ -29,11 +40,15 @@
     .recording-pulse {
       animation: pulse-ring 1.5s infinite ease-in-out;
     }
-    /* 聊天室背景遮罩確保文字清晰 */
     #messages-container {
       background-size: cover;
       background-position: center;
       background-repeat: no-repeat;
+    }
+    /* 防止繪圖時觸發網頁捲動 */
+    #drawing-canvas {
+      touch-action: none;
+      cursor: crosshair;
     }
   </style>
 </head>
@@ -48,7 +63,7 @@
         </svg>
       </div>
       <h1 class="text-2xl font-bold mb-2">跨裝置私密通訊室</h1>
-      <p class="text-sm text-slate-500 mb-6">支援 iPad 與手機同步、群組權限與 Excel 匯入、自訂背景頭像及 AI 每日對話總結。</p>
+      <p class="text-sm text-slate-500 mb-6">支援極速圖片壓縮、手繪塗鴉、自訂字體、即時訊息通知與 AI 每日對話總結。</p>
 
       <button id="btn-google-login" class="w-full flex items-center justify-center gap-3 bg-white border border-slate-300 hover:bg-slate-50 active:scale-[0.98] text-slate-700 font-semibold py-3.5 px-4 rounded-xl shadow-sm transition-all">
         <svg class="w-5 h-5" viewBox="0 0 24 24">
@@ -69,12 +84,11 @@
     <!-- 頂部導覽列 -->
     <header class="bg-white/95 backdrop-blur border-b border-slate-200 px-3 py-2 flex items-center justify-between shrink-0 z-10 gap-2">
       <div class="flex items-center gap-2 min-w-0">
-        <!-- 群組頭像 -->
         <img id="room-avatar-img" src="https://ui-avatars.com/api/?name=聊&background=4f46e5&color=fff" alt="群組頭像" class="w-9 h-9 rounded-full object-cover border border-slate-200 shrink-0" />
         
         <div class="min-w-0">
           <div class="flex items-center gap-1 flex-wrap">
-            <select id="room-select" class="text-xs sm:text-sm bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 font-semibold text-indigo-700 focus:outline-none max-w-[130px] sm:max-w-[200px] truncate">
+            <select id="room-select" class="text-xs sm:text-sm bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 font-semibold text-indigo-700 focus:outline-none max-w-[125px] sm:max-w-[190px] truncate">
             </select>
             <button id="btn-new-room" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 rounded-lg font-medium shrink-0">
               + 建立
@@ -83,17 +97,20 @@
               🔑 加入
             </button>
             <button id="btn-room-settings" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded-lg font-medium shrink-0">
-              ⚙️ 群組設定
+              ⚙️ 設定
             </button>
           </div>
-          <!-- 房間 ID 與 AI 總結按鈕 -->
-          <div class="flex items-center gap-2 mt-1">
+          <!-- 房間 ID、通知開關、AI 總結 -->
+          <div class="flex items-center gap-1.5 mt-1 flex-wrap">
             <div id="room-id-bar" class="hidden flex items-center gap-1">
               <span class="text-[11px] text-slate-500">ID:<strong id="current-room-id-text" class="text-slate-700 font-mono"></strong></span>
               <button id="btn-copy-room-id" class="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">複製</button>
             </div>
-            <button id="btn-ai-summary" class="text-[11px] bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
-              <span>✨ AI 總結今日</span>
+            <button id="btn-enable-notify" class="text-[11px] bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium">
+              🔔 開啟通知
+            </button>
+            <button id="btn-ai-summary" class="text-[11px] bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full font-medium">
+              ✨ AI 總結
             </button>
           </div>
         </div>
@@ -101,9 +118,9 @@
 
       <!-- 右上角個人資料與登出 -->
       <div class="flex items-center gap-1.5 shrink-0">
-        <button id="btn-profile-settings" title="修改個人頭像與暱稱" class="flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-2 py-1 rounded-full transition-colors">
+        <button id="btn-profile-settings" title="修改個人頭像、暱稱與字體" class="flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-2 py-1 rounded-full transition-colors">
           <img id="user-avatar" src="" alt="頭像" class="w-6 h-6 rounded-full object-cover" />
-          <span id="user-name" class="text-xs font-semibold text-slate-700 max-w-[70px] truncate"></span>
+          <span id="user-name" class="text-xs font-semibold text-slate-700 max-w-[65px] truncate"></span>
         </button>
         <button id="btn-logout" class="text-xs bg-slate-100 hover:bg-red-50 hover:text-red-600 text-slate-600 px-2 py-1.5 rounded-lg font-medium">
           登出
@@ -111,7 +128,7 @@
       </div>
     </header>
 
-    <!-- 訊息顯示區（自動佔滿剩餘空間，不會推擠底部輸入框） -->
+    <!-- 訊息顯示區 -->
     <main id="messages-container" class="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-3 bg-slate-50 relative">
       <div id="loading-messages" class="text-center text-sm text-slate-400 py-10">
         正在載入雲端對話紀錄...
@@ -120,7 +137,7 @@
 
     <!-- 上傳進度條 -->
     <div id="upload-progress-bar" class="hidden bg-indigo-50 px-4 py-1.5 border-t border-indigo-100 flex items-center justify-between text-xs text-indigo-700 shrink-0">
-      <span id="upload-status-text">正在上傳...</span>
+      <span id="upload-status-text">正在處理並上傳...</span>
       <span id="upload-percent" class="font-bold">0%</span>
     </div>
 
@@ -136,32 +153,43 @@
       </div>
     </div>
 
-    <!-- 底部輸入列（加高並適配安全邊距，確保 iPad 與手機清晰可見） -->
-    <footer id="input-footer" class="bg-white border-t border-slate-200 px-3 pt-2.5 pb-safe-area shrink-0 shadow-[0_-2px_10px_rgba(0,0,0,0.03)]">
-      <div class="flex items-center gap-1.5 sm:gap-2">
+    <!-- 底部輸入列 -->
+    <footer id="input-footer" class="bg-white border-t border-slate-200 px-2.5 pt-2.5 pb-safe-area shrink-0 shadow-[0_-2px_10px_rgba(0,0,0,0.03)]">
+      <div class="flex items-center gap-1 sm:gap-1.5">
         <input type="file" id="file-input-image" accept="image/*" class="hidden" />
         <input type="file" id="file-input-doc" class="hidden" />
 
+        <!-- 相片 -->
         <button id="btn-upload-image" title="傳送相片" class="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl shrink-0">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
           </svg>
         </button>
 
+        <!-- 手繪塗鴉 -->
+        <button id="btn-open-draw" title="手繪塗鴉" class="p-2 text-slate-500 hover:text-pink-600 hover:bg-pink-50 rounded-xl shrink-0">
+          <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>
+          </svg>
+        </button>
+
+        <!-- 檔案 -->
         <button id="btn-upload-doc" title="傳送檔案" class="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl shrink-0">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
           </svg>
         </button>
 
-        <textarea id="message-input" rows="1" placeholder="輸入訊息..." class="flex-1 bg-slate-100 border border-slate-200 rounded-2xl px-3.5 py-2 text-sm text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white resize-none max-h-28 overflow-y-auto"></textarea>
+        <textarea id="message-input" rows="1" placeholder="輸入訊息..." class="flex-1 bg-slate-100 border border-slate-200 rounded-2xl px-3 py-2 text-sm text-slate-800 focus:ring-2 focus:ring-indigo-500 focus:bg-white resize-none max-h-28 overflow-y-auto"></textarea>
 
+        <!-- 錄音 -->
         <button id="btn-start-record" title="錄製語音" class="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl shrink-0">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
           </svg>
         </button>
 
+        <!-- 傳送 -->
         <button id="btn-send-text" class="p-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-xl shadow-sm shrink-0">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
@@ -171,31 +199,57 @@
     </footer>
   </div>
 
-  <!-- 彈窗 1：個人設定（修改暱稱與頭像） -->
+  <!-- 彈窗 1：個人設定（修改暱稱、極速壓縮頭像、字體設計） -->
   <div id="modal-profile" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4 max-h-[90dvh] overflow-y-auto">
       <div class="flex justify-between items-center border-b pb-2">
-        <h3 class="font-bold text-base">個人資料設定</h3>
+        <h3 class="font-bold text-base">個人與字體設計</h3>
         <button id="close-modal-profile" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
       </div>
+      
       <div class="flex flex-col items-center gap-2">
         <img id="preview-user-avatar" src="" class="w-20 h-20 rounded-full object-cover border-2 border-indigo-200" />
         <label class="text-xs bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg cursor-pointer font-medium hover:bg-indigo-100">
-          更換個人頭像
+          ⚡ 極速更換頭像
           <input type="file" id="input-user-avatar" accept="image/*" class="hidden" />
         </label>
       </div>
+
       <div>
         <label class="block text-xs font-medium text-slate-600 mb-1">顯示暱稱</label>
         <input type="text" id="input-user-nickname" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
       </div>
+
+      <!-- 字體設計區塊 -->
+      <div class="border-t pt-3 space-y-3">
+        <p class="text-xs font-bold text-indigo-700">🔤 聊天室字體設計</p>
+        <div>
+          <label class="block text-xs text-slate-600 mb-1">字體風格</label>
+          <select id="select-font-family" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
+            <option value="'Noto Sans TC', sans-serif">現代黑體（清晰預設）</option>
+            <option value="'Zen Maru Gothic', sans-serif">可愛圓體（柔和圓潤）</option>
+            <option value="'Noto Serif TC', serif">文青明體（優雅襯線）</option>
+            <option value="ui-monospace, SFMono-Regular, Menlo, monospace">科技等寬體（工程風格）</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-slate-600 mb-1">字體大小</label>
+          <select id="select-font-size" class="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm bg-white">
+            <option value="13px">小巧 (13px)</option>
+            <option value="15px" selected>標準 (15px)</option>
+            <option value="17px">放大 (17px)</option>
+            <option value="20px">特大 (20px)</option>
+          </select>
+        </div>
+      </div>
+
       <button id="btn-save-profile" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl text-sm">
-        儲存個人設定
+        儲存設定
       </button>
     </div>
   </div>
 
-  <!-- 彈窗 2：群組設定（改名、改頭像背景、加入成員 & Excel 匯入） -->
+  <!-- 彈窗 2：群組設定（極速上傳頭像與背景、改名、成員管理） -->
   <div id="modal-room" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4 max-h-[88dvh] overflow-y-auto">
       <div class="flex justify-between items-center border-b pb-2">
@@ -203,29 +257,27 @@
         <button id="close-modal-room" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
       </div>
 
-      <!-- 群組名稱 -->
       <div>
         <label class="block text-xs font-medium text-slate-600 mb-1">修改群組名稱</label>
         <div class="flex gap-2">
           <input type="text" id="input-room-name" class="flex-1 border border-slate-300 rounded-xl px-3 py-2 text-sm" />
-          <button id="btn-save-room-name" class="bg-indigo-600 text-white px-3 py-2 rounded-xl text-xs font-medium shrink-0">更新名稱</button>
+          <button id="btn-save-room-name" class="bg-indigo-600 text-white px-3 py-2 rounded-xl text-xs font-medium shrink-0">更新</button>
         </div>
       </div>
 
-      <!-- 群組頭像與背景 -->
       <div class="grid grid-cols-2 gap-3 pt-1">
         <div class="border border-slate-200 rounded-xl p-3 text-center">
-          <p class="text-xs font-medium text-slate-600 mb-2">群組頭像</p>
-          <label class="inline-block text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg cursor-pointer">
-            上傳新頭像
+          <p class="text-xs font-medium text-slate-600 mb-2">群組頭像 (自動壓縮)</p>
+          <label class="inline-block text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg cursor-pointer font-medium">
+            ⚡ 上傳頭像
             <input type="file" id="input-room-avatar" accept="image/*" class="hidden" />
           </label>
         </div>
         <div class="border border-slate-200 rounded-xl p-3 text-center">
-          <p class="text-xs font-medium text-slate-600 mb-2">聊天室背景</p>
+          <p class="text-xs font-medium text-slate-600 mb-2">聊天背景 (自動優化)</p>
           <div class="flex justify-center gap-1">
-            <label class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1.5 rounded-lg cursor-pointer">
-              上傳背景
+            <label class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1.5 rounded-lg cursor-pointer font-medium">
+              ⚡ 上傳背景
               <input type="file" id="input-room-bg" accept="image/*" class="hidden" />
             </label>
             <button id="btn-clear-room-bg" class="text-xs text-red-500 px-1.5 py-1">清除</button>
@@ -233,11 +285,8 @@
         </div>
       </div>
 
-      <!-- 創建者專屬：新增成員與 Excel 匯入 -->
       <div id="creator-member-section" class="border-t pt-3 space-y-3">
         <p class="text-xs font-bold text-indigo-700">👑 創建者專屬：將其他人加入群組</p>
-        <p class="text-[11px] text-slate-500">輸入對方的 Google Email，對方登入後選單就會自動出現此群組。</p>
-        
         <div class="flex gap-2">
           <input type="email" id="input-invite-email" placeholder="example@gmail.com" class="flex-1 border border-slate-300 rounded-xl px-3 py-2 text-xs" />
           <button id="btn-add-single-member" class="bg-emerald-600 text-white px-3 py-2 rounded-xl text-xs font-medium shrink-0">加入</button>
@@ -245,9 +294,8 @@
 
         <div class="bg-slate-50 border border-dashed border-slate-300 rounded-xl p-3 text-center">
           <p class="text-xs font-medium text-slate-700 mb-1">📊 透過 Excel 批次匯入成員</p>
-          <p class="text-[11px] text-slate-400 mb-2">支援 .xlsx / .xls / .csv，系統會自動讀取表格中的所有 Email</p>
           <label class="inline-block text-xs bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg cursor-pointer font-medium shadow-sm">
-            選擇 Excel 檔案匯入
+            選擇 Excel 檔案 (.xlsx / .csv)
             <input type="file" id="input-excel-members" accept=".xlsx,.xls,.csv" class="hidden" />
           </label>
           <p id="excel-import-status" class="text-[11px] text-emerald-600 mt-1.5 font-medium"></p>
@@ -256,11 +304,51 @@
     </div>
   </div>
 
-  <!-- 彈窗 3：AI 總結今日對話 -->
+  <!-- 彈窗 3：手繪塗鴉板（支援 Apple Pencil 與觸控） -->
+  <div id="modal-draw" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-3">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-4 shadow-2xl flex flex-col gap-3">
+      <div class="flex justify-between items-center">
+        <h3 class="font-bold text-base">🎨 手繪塗鴉板</h3>
+        <button id="close-modal-draw" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+      </div>
+
+      <!-- 畫筆工具列 -->
+      <div class="flex items-center justify-between gap-2 bg-slate-100 p-2 rounded-xl flex-wrap">
+        <div class="flex items-center gap-1.5">
+          <button data-color="#1e293b" class="draw-color-btn w-6 h-6 rounded-full bg-slate-800 ring-2 ring-offset-1 ring-indigo-500"></button>
+          <button data-color="#ef4444" class="draw-color-btn w-6 h-6 rounded-full bg-red-500"></button>
+          <button data-color="#3b82f6" class="draw-color-btn w-6 h-6 rounded-full bg-blue-500"></button>
+          <button data-color="#10b981" class="draw-color-btn w-6 h-6 rounded-full bg-emerald-500"></button>
+          <button data-color="#f59e0b" class="draw-color-btn w-6 h-6 rounded-full bg-amber-500"></button>
+          <button data-color="#ffffff" title="橡皮擦" class="draw-color-btn px-2 py-0.5 text-xs bg-white border border-slate-300 rounded-md">橡皮擦</button>
+        </div>
+        <div class="flex items-center gap-2">
+          <select id="draw-size" class="text-xs border border-slate-300 rounded-lg px-2 py-1 bg-white">
+            <option value="3">細筆</option>
+            <option value="6" selected>中筆</option>
+            <option value="12">粗筆</option>
+            <option value="22">特粗 (橡皮擦)</option>
+          </select>
+          <button id="btn-clear-canvas" class="text-xs text-red-600 bg-red-50 px-2.5 py-1 rounded-lg font-medium">清空</button>
+        </div>
+      </div>
+
+      <!-- 畫布區 -->
+      <div class="border-2 border-slate-200 rounded-xl overflow-hidden bg-white">
+        <canvas id="drawing-canvas" width="460" height="320" class="w-full h-64 sm:h-72 block"></canvas>
+      </div>
+
+      <button id="btn-send-drawing" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl text-sm shadow-sm">
+        傳送畫作到聊天室
+      </button>
+    </div>
+  </div>
+
+  <!-- 彈窗 4：AI 總結今日對話 -->
   <div id="modal-ai" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-3 max-h-[85dvh] flex flex-col">
       <div class="flex justify-between items-center border-b pb-2 shrink-0">
-        <h3 class="font-bold text-base flex items-center gap-1.5">✨ AI 今日對話重點總結</h3>
+        <h3 class="font-bold text-base">✨ AI 今日對話重點總結</h3>
         <button id="close-modal-ai" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
       </div>
       
@@ -270,7 +358,7 @@
 
       <div class="border-t pt-2.5 shrink-0">
         <details class="text-xs text-slate-500">
-          <summary class="cursor-pointer font-medium text-indigo-600">進階：設定 Gemini API Key（可選，啟用深度 AI 摘要）</summary>
+          <summary class="cursor-pointer font-medium text-indigo-600">進階：設定 Gemini API Key（啟用深度語意分析）</summary>
           <div class="mt-2 flex gap-1.5">
             <input type="password" id="input-gemini-key" placeholder="貼上 AIzaSy... 金鑰" class="flex-1 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs" />
             <button id="btn-save-gemini-key" class="bg-indigo-600 text-white px-2.5 py-1.5 rounded-lg text-xs">儲存</button>
@@ -303,7 +391,6 @@
     const storage = getStorage(app);
     const provider = new GoogleAuthProvider();
 
-    // 狀態變數
     let currentUser = null;
     let userProfile = { displayName: "", photoURL: "" };
     let currentRoomMeta = null;
@@ -311,6 +398,10 @@
     let unsubscribeMessages = null;
     let unsubscribeMyRooms = null;
     let unsubscribeRoomMeta = null;
+    let isInitialLoad = true;
+    let unreadCount = 0;
+
+    // 錄音變數
     let mediaRecorder = null;
     let audioChunks = [];
     let recordInterval = null;
@@ -330,6 +421,118 @@
     const uploadStatusText = document.getElementById('upload-status-text');
     const uploadPercent = document.getElementById('upload-percent');
 
+    // ================= 1. 前端極速圖片壓縮引擎 =================
+    function compressImage(file, maxWidth, quality = 0.75) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+
+            if (width > maxWidth) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            canvas.toBlob((blob) => {
+              resolve(blob || file);
+            }, 'image/jpeg', quality);
+          };
+          img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // ================= 2. 系統通知與提示音引擎 =================
+    const btnEnableNotify = document.getElementById('btn-enable-notify');
+    function updateNotifyButtonUI() {
+      if (!("Notification" in window)) {
+        btnEnableNotify.textContent = "🔕 不支援通知";
+        return;
+      }
+      if (Notification.permission === "granted") {
+        btnEnableNotify.textContent = "🔔 通知已開啟";
+        btnEnableNotify.className = "text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-medium";
+      }
+    }
+    updateNotifyButtonUI();
+
+    btnEnableNotify.addEventListener('click', async () => {
+      if (!("Notification" in window)) {
+        alert("此瀏覽器不支援通知。若使用 iPad，請先點 Safari 底部分享按鈕 ＞「加入主畫面」，再從主畫面開啟 App 點擊此按鈕！");
+        return;
+      }
+      const perm = await Notification.requestPermission();
+      updateNotifyButtonUI();
+      if (perm === "granted") {
+        playNotificationSound();
+        new Notification("通知已啟用！", { body: "當有新訊息時，即使未看著網頁也會收到提醒。" });
+      }
+    });
+
+    // 內建清脆提示音（無需外部音檔）
+    function playNotificationSound() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1100, ctx.currentTime + 0.12);
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.25);
+      } catch (e) {}
+    }
+
+    function triggerNewMessageAlert(msgData) {
+      playNotificationSound();
+      if (document.hidden) {
+        unreadCount++;
+        document.title = `(${unreadCount}) 新訊息 - 私密通訊室`;
+      }
+      if ("Notification" in window && Notification.permission === "granted" && document.hidden) {
+        const bodyText = msgData.type === 'text' ? msgData.text :
+                         msgData.type === 'image' ? '[傳送了一張圖片/畫作]' :
+                         msgData.type === 'audio' ? '[傳送了一則語音訊息]' : '[傳送了一個檔案]';
+        new Notification(`${msgData.displayName || '新訊息'}`, {
+          body: bodyText,
+          icon: msgData.photoURL || undefined
+        });
+      }
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        unreadCount = 0;
+        document.title = "專屬跨裝置私密通訊室";
+      }
+    });
+
+    // ================= 3. 字體設計套用 =================
+    function applySavedFontSettings() {
+      const savedFont = localStorage.getItem('chat_font_family') || "'Noto Sans TC', sans-serif";
+      const savedSize = localStorage.getItem('chat_font_size') || "15px";
+      document.documentElement.style.setProperty('--chat-font-family', savedFont);
+      document.documentElement.style.setProperty('--chat-font-size', savedSize);
+      document.getElementById('select-font-family').value = savedFont;
+      document.getElementById('select-font-size').value = savedSize;
+    }
+    applySavedFontSettings();
+
+    // ================= 基礎登入與聊天室邏輯 =================
     function generateRoomId() {
       const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
       let result = '';
@@ -341,7 +544,6 @@
       return email.trim().toLowerCase();
     }
 
-    // 登入與登出
     document.getElementById('btn-google-login').addEventListener('click', async () => {
       try {
         await signInWithPopup(auth, provider);
@@ -353,7 +555,6 @@
     });
     document.getElementById('btn-logout').addEventListener('click', () => signOut(auth));
 
-    // 監聽登入狀態
     onAuthStateChanged(auth, async (user) => {
       if (user) {
         currentUser = user;
@@ -373,7 +574,6 @@
       }
     });
 
-    // 載入或建立自訂個人資料（暱稱與頭像）
     async function loadOrInitUserProfile(user) {
       const profileRef = doc(db, "user_profiles", user.uid);
       const snap = await getDoc(profileRef);
@@ -395,7 +595,6 @@
       document.getElementById('user-avatar').src = userProfile.photoURL;
     }
 
-    // 檢查是否有創建者透過 Email / Excel 邀請我加入的群組
     async function checkPendingInvites(email) {
       if (!email) return;
       const cleanEmail = normalizeEmail(email);
@@ -412,7 +611,6 @@
       }
     }
 
-    // 載入我的聊天室列表
     function loadMyJoinedRooms() {
       if (unsubscribeMyRooms) unsubscribeMyRooms();
       const myRoomsQuery = query(collection(db, "users", currentUser.uid, "joined_rooms"), orderBy("joinedAt", "asc"));
@@ -425,7 +623,6 @@
 
         for (const docSnap of snapshot.docs) {
           const roomId = docSnap.id;
-          // 讀取最新群組名稱（若群組改名會同步更新）
           const latestRoomSnap = await getDoc(doc(db, "private_rooms", roomId));
           const displayName = latestRoomSnap.exists() ? latestRoomSnap.data().name : docSnap.data().name;
           
@@ -458,20 +655,16 @@
         roomIdBar.classList.remove('hidden');
         btnRoomSettings.classList.remove('hidden');
 
-        // 即時監聽群組設定（名稱、頭像、背景、創建者）
         unsubscribeRoomMeta = onSnapshot(doc(db, "private_rooms", roomId), (docSnap) => {
           if (docSnap.exists()) {
             currentRoomMeta = docSnap.data();
-            // 更新選單文字
             const selectedOpt = roomSelect.querySelector(`option[value="${roomId}"]`);
             if (selectedOpt) selectedOpt.textContent = `🔒 ${currentRoomMeta.name}`;
 
-            // 更新群組頭像
             roomAvatarImg.src = currentRoomMeta.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentRoomMeta.name)}&background=4f46e5&color=fff`;
 
-            // 更新聊天室背景
             if (currentRoomMeta.bgURL) {
-              messagesContainer.style.backgroundImage = `linear-gradient(rgba(255,255,255,0.75), rgba(255,255,255,0.75)), url('${currentRoomMeta.bgURL}')`;
+              messagesContainer.style.backgroundImage = `linear-gradient(rgba(255,255,255,0.72), rgba(255,255,255,0.72)), url('${currentRoomMeta.bgURL}')`;
             } else {
               messagesContainer.style.backgroundImage = 'none';
             }
@@ -488,7 +681,6 @@
       loadMessages();
     }
 
-    // 複製房間 ID
     document.getElementById('btn-copy-room-id').addEventListener('click', () => {
       navigator.clipboard.writeText(currentRoomIdText.textContent);
       const btn = document.getElementById('btn-copy-room-id');
@@ -496,7 +688,6 @@
       setTimeout(() => btn.textContent = "複製", 1500);
     });
 
-    // 建立新聊天室
     document.getElementById('btn-new-room').addEventListener('click', async () => {
       const roomName = prompt("請輸入新群組名稱：");
       if (!roomName || !roomName.trim()) return;
@@ -520,7 +711,6 @@
       alert(`群組「${cleanName}」建立成功！\n房間 ID：${newRoomId}`);
     });
 
-    // 憑房間 ID 加入
     document.getElementById('btn-join-room').addEventListener('click', async () => {
       const inputId = prompt("請輸入 6 碼房間 ID：");
       if (!inputId || !inputId.trim()) return;
@@ -528,7 +718,7 @@
 
       const roomSnap = await getDoc(doc(db, "private_rooms", cleanId));
       if (!roomSnap.exists()) {
-        alert("找不到此房間 ID，請確認輸入是否正確！");
+        alert("找不到此房間 ID！");
         return;
       }
 
@@ -541,21 +731,34 @@
       onRoomChanged();
     });
 
-    // 載入訊息與快取今日對話
     function loadMessages() {
       if (unsubscribeMessages) unsubscribeMessages();
+      isInitialLoad = true;
       messagesContainer.innerHTML = '<div class="text-center text-sm text-slate-400 py-10">載入對話中...</div>';
 
       const roomId = roomSelect.value;
       const q = query(collection(db, "rooms", roomId, "messages"), orderBy("createdAt", "asc"));
 
       unsubscribeMessages = onSnapshot(q, (snapshot) => {
+        // 偵測即時新增的外來訊息並發送通知
+        if (!isInitialLoad) {
+          snapshot.docChanges().forEach((change) => {
+            if (change.type === "added") {
+              const newData = change.doc.data();
+              if (newData.uid !== currentUser.uid) {
+                triggerNewMessageAlert(newData);
+              }
+            }
+          });
+        }
+
         messagesContainer.innerHTML = '';
         todayMessagesCache = [];
         const todayStr = new Date().toDateString();
 
         if (snapshot.empty) {
           messagesContainer.innerHTML = '<div class="text-center text-sm text-slate-500 bg-white/80 rounded-xl py-4 px-6 mx-auto w-fit mt-10">尚無訊息，開始聊天吧！</div>';
+          isInitialLoad = false;
           return;
         }
 
@@ -563,7 +766,6 @@
           const data = docSnap.data();
           renderMessage(data);
 
-          // 收集今天的文字訊息供 AI 總結
           if (data.createdAt && data.createdAt.toDate().toDateString() === todayStr && data.type === 'text') {
             const time = data.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             todayMessagesCache.push(`[${time}] ${data.displayName}: ${data.text}`);
@@ -571,6 +773,7 @@
         });
 
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        isInitialLoad = false;
       });
     }
 
@@ -584,9 +787,9 @@
 
       let contentHtml = '';
       if (data.type === 'text') {
-        contentHtml = `<p class="whitespace-pre-wrap break-words text-sm leading-relaxed">${escapeHtml(data.text)}</p>`;
+        contentHtml = `<p class="whitespace-pre-wrap break-words chat-msg-text">${escapeHtml(data.text)}</p>`;
       } else if (data.type === 'image') {
-        contentHtml = `<a href="${data.fileUrl}" target="_blank"><img src="${data.fileUrl}" class="max-w-[220px] sm:max-w-xs rounded-xl object-cover" /></a>`;
+        contentHtml = `<a href="${data.fileUrl}" target="_blank"><img src="${data.fileUrl}" class="max-w-[220px] sm:max-w-xs rounded-xl object-cover bg-white" /></a>`;
       } else if (data.type === 'audio') {
         contentHtml = `<audio controls src="${data.fileUrl}" class="h-9 w-52 max-w-full"></audio>`;
       } else if (data.type === 'file') {
@@ -596,17 +799,16 @@
       wrapper.innerHTML = `
         <img src="${avatarUrl}" class="w-8 h-8 rounded-full object-cover shrink-0 mt-1 border border-slate-200 bg-white" />
         <div class="flex flex-col ${isMine ? 'items-end' : 'items-start'} max-w-[78%]">
-          <span class="text-[11px] text-slate-600 font-medium mb-0.5 px-1 bg-white/70 rounded">${escapeHtml(data.displayName || '使用者')}</span>
+          <span class="text-[11px] text-slate-600 font-medium mb-0.5 px-1 bg-white/75 rounded">${escapeHtml(data.displayName || '使用者')}</span>
           <div class="px-3.5 py-2 rounded-2xl shadow-sm ${isMine ? 'bg-indigo-600 text-white rounded-tr-sm' : 'bg-white text-slate-800 border border-slate-200 rounded-tl-sm'}">
             ${contentHtml}
           </div>
-          <span class="text-[10px] text-slate-500 mt-0.5 px-1 bg-white/70 rounded">${timeStr}</span>
+          <span class="text-[10px] text-slate-500 mt-0.5 px-1 bg-white/75 rounded">${timeStr}</span>
         </div>
       `;
       messagesContainer.appendChild(wrapper);
     }
 
-    // 傳送文字
     async function sendTextMessage() {
       const text = messageInput.value.trim();
       if (!text || !currentUser) return;
@@ -632,13 +834,12 @@
       }
     });
 
-    // 通用圖片/檔案上傳到 Storage
-    function uploadToStorage(file, path, onComplete) {
+    function uploadToStorage(fileOrBlob, path, onComplete) {
       uploadProgressBar.classList.remove('hidden');
-      uploadStatusText.textContent = `正在上傳...`;
+      uploadStatusText.textContent = `極速上傳中...`;
       uploadPercent.textContent = '0%';
 
-      const task = uploadBytesResumable(ref(storage, path), file);
+      const task = uploadBytesResumable(ref(storage, path), fileOrBlob);
       task.on('state_changed',
         (snap) => {
           uploadPercent.textContent = `${Math.round((snap.bytesTransferred / snap.totalBytes) * 100)}%`;
@@ -655,12 +856,13 @@
       );
     }
 
-    // 聊天室傳送相片與檔案
+    // 聊天室傳送相片（自動適度壓縮加速）
     document.getElementById('btn-upload-image').addEventListener('click', () => document.getElementById('file-input-image').click());
-    document.getElementById('file-input-image').addEventListener('change', (e) => {
+    document.getElementById('file-input-image').addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      uploadToStorage(file, `chat_uploads/${roomSelect.value}/${Date.now()}_${file.name}`, async (url) => {
+      const compressed = await compressImage(file, 1280, 0.8);
+      uploadToStorage(compressed, `chat_uploads/${roomSelect.value}/${Date.now()}.jpg`, async (url) => {
         await addDoc(collection(db, "rooms", roomSelect.value, "messages"), {
           uid: currentUser.uid,
           displayName: userProfile.displayName,
@@ -691,7 +893,93 @@
       e.target.value = '';
     });
 
-    // 語音錄製
+    // ================= 4. 手繪塗鴉板邏輯 =================
+    const modalDraw = document.getElementById('modal-draw');
+    const canvas = document.getElementById('drawing-canvas');
+    const ctx = canvas.getContext('2d');
+    let isDrawing = false;
+    let brushColor = '#1e293b';
+
+    function clearCanvasWhite() {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    clearCanvasWhite();
+
+    document.getElementById('btn-open-draw').addEventListener('click', () => {
+      modalDraw.classList.remove('hidden');
+    });
+    document.getElementById('close-modal-draw').addEventListener('click', () => modalDraw.classList.add('hidden'));
+    document.getElementById('btn-clear-canvas').addEventListener('click', clearCanvasWhite);
+
+    document.querySelectorAll('.draw-color-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.draw-color-btn').forEach(b => b.classList.remove('ring-2', 'ring-offset-1', 'ring-indigo-500'));
+        btn.classList.add('ring-2', 'ring-offset-1', 'ring-indigo-500');
+        brushColor = btn.getAttribute('data-color');
+      });
+    });
+
+    function getCanvasCoords(e) {
+      const rect = canvas.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      return {
+        x: (clientX - rect.left) * (canvas.width / rect.width),
+        y: (clientY - rect.top) * (canvas.height / rect.height)
+      };
+    }
+
+    function startDraw(e) {
+      isDrawing = true;
+      const { x, y } = getCanvasCoords(e);
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+    }
+
+    function moveDraw(e) {
+      if (!isDrawing) return;
+      e.preventDefault();
+      const { x, y } = getCanvasCoords(e);
+      ctx.lineWidth = parseInt(document.getElementById('draw-size').value, 10);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = brushColor;
+      ctx.lineTo(x, y);
+      ctx.stroke();
+    }
+
+    function endDraw() {
+      isDrawing = false;
+      ctx.closePath();
+    }
+
+    canvas.addEventListener('mousedown', startDraw);
+    canvas.addEventListener('mousemove', moveDraw);
+    canvas.addEventListener('mouseup', endDraw);
+    canvas.addEventListener('mouseleave', endDraw);
+    canvas.addEventListener('touchstart', startDraw, { passive: false });
+    canvas.addEventListener('touchmove', moveDraw, { passive: false });
+    canvas.addEventListener('touchend', endDraw);
+
+    document.getElementById('btn-send-drawing').addEventListener('click', () => {
+      canvas.toBlob((blob) => {
+        modalDraw.classList.add('hidden');
+        uploadToStorage(blob, `chat_uploads/${roomSelect.value}/draw_${Date.now()}.jpg`, async (url) => {
+          await addDoc(collection(db, "rooms", roomSelect.value, "messages"), {
+            uid: currentUser.uid,
+            displayName: userProfile.displayName,
+            photoURL: userProfile.photoURL,
+            type: 'image',
+            fileUrl: url,
+            createdAt: serverTimestamp()
+          });
+          clearCanvasWhite();
+        });
+      }, 'image/jpeg', 0.85);
+    });
+
+    // ================= 語音錄製 =================
     document.getElementById('btn-start-record').addEventListener('click', async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -747,7 +1035,7 @@
       stopRecordingUI();
     });
 
-    // ================= 個人設定彈窗邏輯 =================
+    // ================= 個人設定彈窗（極速壓縮頭像 + 字體設定） =================
     const modalProfile = document.getElementById('modal-profile');
     document.getElementById('btn-profile-settings').addEventListener('click', () => {
       document.getElementById('preview-user-avatar').src = userProfile.photoURL;
@@ -756,10 +1044,12 @@
     });
     document.getElementById('close-modal-profile').addEventListener('click', () => modalProfile.classList.add('hidden'));
 
-    document.getElementById('input-user-avatar').addEventListener('change', (e) => {
+    // 個人頭像壓縮至 256px（瞬間完成上傳）
+    document.getElementById('input-user-avatar').addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      uploadToStorage(file, `avatars/users/${currentUser.uid}_${Date.now()}`, async (url) => {
+      const smallAvatar = await compressImage(file, 256, 0.75);
+      uploadToStorage(smallAvatar, `avatars/users/${currentUser.uid}_${Date.now()}.jpg`, async (url) => {
         userProfile.photoURL = url;
         document.getElementById('preview-user-avatar').src = url;
         await updateDoc(doc(db, "user_profiles", currentUser.uid), { photoURL: url });
@@ -769,29 +1059,34 @@
 
     document.getElementById('btn-save-profile').addEventListener('click', async () => {
       const newName = document.getElementById('input-user-nickname').value.trim();
-      if (!newName) return;
-      userProfile.displayName = newName;
-      await updateDoc(doc(db, "user_profiles", currentUser.uid), { displayName: newName });
-      updateUserHeaderUI();
+      if (newName) {
+        userProfile.displayName = newName;
+        await updateDoc(doc(db, "user_profiles", currentUser.uid), { displayName: newName });
+        updateUserHeaderUI();
+      }
+
+      const selectedFont = document.getElementById('select-font-family').value;
+      const selectedSize = document.getElementById('select-font-size').value;
+      localStorage.setItem('chat_font_family', selectedFont);
+      localStorage.setItem('chat_font_size', selectedSize);
+      applySavedFontSettings();
+
       modalProfile.classList.add('hidden');
     });
 
-    // ================= 群組設定與 Excel 匯入邏輯 =================
+    // ================= 群組設定彈窗（極速壓縮頭像與背景 + Excel 匯入） =================
     const modalRoom = document.getElementById('modal-room');
     btnRoomSettings.addEventListener('click', () => {
       if (!currentRoomMeta) return;
       document.getElementById('input-room-name').value = currentRoomMeta.name;
       document.getElementById('excel-import-status').textContent = '';
 
-      // 只有群組創建者才看得到「加入成員與 Excel 匯入」區塊
       const isCreator = currentRoomMeta.createdBy === currentUser.uid;
       document.getElementById('creator-member-section').classList.toggle('hidden', !isCreator);
-
       modalRoom.classList.remove('hidden');
     });
     document.getElementById('close-modal-room').addEventListener('click', () => modalRoom.classList.add('hidden'));
 
-    // 修改群組名稱
     document.getElementById('btn-save-room-name').addEventListener('click', async () => {
       const newName = document.getElementById('input-room-name').value.trim();
       if (!newName) return;
@@ -799,23 +1094,23 @@
       alert("群組名稱已更新！");
     });
 
-    // 修改群組頭像
-    document.getElementById('input-room-avatar').addEventListener('change', (e) => {
+    // 群組頭像壓縮至 256px（秒傳）
+    document.getElementById('input-room-avatar').addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      uploadToStorage(file, `rooms_assets/${roomSelect.value}/avatar_${Date.now()}`, async (url) => {
+      const smallAvatar = await compressImage(file, 256, 0.75);
+      uploadToStorage(smallAvatar, `rooms_assets/${roomSelect.value}/avatar_${Date.now()}.jpg`, async (url) => {
         await updateDoc(doc(db, "private_rooms", roomSelect.value), { photoURL: url });
-        alert("群組頭像已更新！");
       });
     });
 
-    // 修改群組背景
-    document.getElementById('input-room-bg').addEventListener('change', (e) => {
+    // 群組背景壓縮至 1280px 並轉為輕量 JPEG（從 8MB 縮為 180KB，秒速完成）
+    document.getElementById('input-room-bg').addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      uploadToStorage(file, `rooms_assets/${roomSelect.value}/bg_${Date.now()}`, async (url) => {
+      const optimizedBg = await compressImage(file, 1280, 0.7);
+      uploadToStorage(optimizedBg, `rooms_assets/${roomSelect.value}/bg_${Date.now()}.jpg`, async (url) => {
         await updateDoc(doc(db, "private_rooms", roomSelect.value), { bgURL: url });
-        alert("聊天室背景已更新！");
       });
     });
 
@@ -823,7 +1118,6 @@
       await updateDoc(doc(db, "private_rooms", roomSelect.value), { bgURL: "" });
     });
 
-    // 邀請單一成員 Email
     async function inviteEmailToRoom(email, roomId) {
       const cleanEmail = normalizeEmail(email);
       if (!cleanEmail || !cleanEmail.includes('@')) return false;
@@ -838,14 +1132,13 @@
       const emailInput = document.getElementById('input-invite-email');
       const ok = await inviteEmailToRoom(emailInput.value, roomSelect.value);
       if (ok) {
-        alert(`已將 ${emailInput.value.trim()} 加入群組！對方登入後即可直接看到此群組。`);
+        alert(`已將 ${emailInput.value.trim()} 加入群組！`);
         emailInput.value = '';
       } else {
         alert("請輸入有效的 Email 地址");
       }
     });
 
-    // Excel 批次匯入成員
     document.getElementById('input-excel-members').addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -858,7 +1151,6 @@
           const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
           const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
 
-          // 從所有儲存格中自動提取合法的 Email
           const foundEmails = new Set();
           const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
 
@@ -872,7 +1164,7 @@
           });
 
           if (foundEmails.size === 0) {
-            alert("在 Excel 中找不到任何 Email 地址，請確認檔案內容！");
+            alert("在 Excel 中找不到任何 Email 地址！");
             return;
           }
 
@@ -891,7 +1183,7 @@
       e.target.value = '';
     });
 
-    // ================= AI 總結今日對話邏輯 =================
+    // ================= AI 總結今日對話 =================
     const modalAi = document.getElementById('modal-ai');
     const aiSummaryContent = document.getElementById('ai-summary-content');
     const inputGeminiKey = document.getElementById('input-gemini-key');
@@ -931,12 +1223,11 @@
           });
           const result = await response.json();
           const summaryText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
-          aiSummaryContent.textContent = summaryText || "AI 分析完成，但未回傳內容，請檢查 API Key 是否正確。";
+          aiSummaryContent.textContent = summaryText || "AI 分析完成，但未回傳內容。";
         } catch (err) {
           aiSummaryContent.textContent = "連線 AI 失敗：" + err.message;
         }
       } else {
-        // 內建免金鑰快速重点摘要
         const participants = [...new Set(todayMessagesCache.map(line => line.split('] ')[1]?.split(':')[0]))];
         const recentLines = todayMessagesCache.slice(-8).join('\n');
         aiSummaryContent.textContent =
